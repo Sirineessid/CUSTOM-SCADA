@@ -295,6 +295,10 @@ export class TagPropertyService {
         );
     }
 
+    public addTagsPostgreSQL(device: Device, tagsMap?: any): Observable<any> {
+        return this.addTagsOpcUa(device, tagsMap);
+    }
+
     public editTagPropertyOpcUa(device: Device, tag: Tag, checkToAdd: boolean): Observable<any> {
         let oldTagId = tag.id;
         let tagToEdit: Tag = Utils.clone(tag);
@@ -632,6 +636,7 @@ export class TagPropertyService {
         let dialogRef = this.dialog.open(TagPropertySnmpScanComponent, {
             disableClose: true,
             position: { top: '60px' },
+            maxWidth: 'calc(100vw - 32px)',
             data: <TagPropertySnmpScanData> {
                 device: device,
                 existing: existing
@@ -643,7 +648,7 @@ export class TagPropertyService {
                 if (result) {
                     result.selected?.forEach(row => {
                         let tag = new Tag(Utils.getGUID(TAG_PREFIX));
-                        tag.name = row.name || row.address;
+                        tag.name = (row.name || row.address).replace(/^[^:]+::/, '');    // MIB name without the module prefix
                         tag.type = row.type;
                         tag.address = row.address;
                         this.checkToAdd(tag, device);
