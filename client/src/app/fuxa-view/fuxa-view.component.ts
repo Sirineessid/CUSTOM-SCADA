@@ -15,11 +15,7 @@ import {
 import { Subject, Subscription, take } from 'rxjs';
 import { ChangeDetectorRef } from '@angular/core';
 
-<<<<<<< HEAD
-import { Event, GaugeEvent, GaugeEventActionType, GaugeSettings, GaugeProperty, GaugeEventType, GaugeRangeProperty, GaugeStatus, Hmi, View, ViewType, Variable, ZoomModeType, InputOptionType, DocAlignType, DictionaryGaugeSettings, GaugeEventRelativeFromType, ViewEventType, InputActionEscType, IPropertyVariable, DocProfile, ButtonActionMode } from '../_models/hmi';
-=======
-import { Event, GaugeEvent, GaugeEventActionType, GaugeSettings, GaugeProperty, GaugeEventType, GaugeRangeProperty, GaugeStatus, Hmi, View, ViewType, Variable, ZoomModeType, InputOptionType, DocAlignType, DictionaryGaugeSettings, GaugeEventRelativeFromType, ViewEventType, InputActionEscType, IPropertyVariable, DocProfile, LinkType } from '../_models/hmi';
->>>>>>> origin/feature/multi-sites
+import { Event, GaugeEvent, GaugeEventActionType, GaugeSettings, GaugeProperty, GaugeEventType, GaugeRangeProperty, GaugeStatus, Hmi, View, ViewType, Variable, ZoomModeType, InputOptionType, DocAlignType, DictionaryGaugeSettings, GaugeEventRelativeFromType, ViewEventType, InputActionEscType, IPropertyVariable, DocProfile, ButtonActionMode, LinkType } from '../_models/hmi';
 import { GaugesManager } from '../gauges/gauges.component';
 import { Utils } from '../_helpers/utils';
 import { ScriptParam, SCRIPT_PARAMS_MAP, ScriptParamType } from '../_models/script';

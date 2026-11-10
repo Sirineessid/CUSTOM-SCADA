@@ -237,14 +237,14 @@ export class DeviceListComponent implements OnInit, AfterViewInit {
         }
     }
 
-<<<<<<< HEAD
     onScanSnmpTag() {
         if (this.deviceSelected.type === DeviceType.SNMP) {
             this.tagPropertyService.scanTagsSnmp(this.deviceSelected).subscribe(result => {
                 this.bindToTable(this.deviceSelected.tags);
             });
         }
-=======
+    }
+
     /** custom-SCADA: create S7 tags from the variables of a TIA Portal export (tag table or DB source) */
     onImportS7() {
         const dialogRef = this.dialog.open(S7ImportComponent, {
@@ -280,7 +280,6 @@ export class DeviceListComponent implements OnInit, AfterViewInit {
         });
         this.projectService.setDeviceTags(device);
         this.bindToTable(device.tags);
->>>>>>> origin/feature/multi-sites
     }
 
     onScanRedisTag() {

@@ -4,11 +4,7 @@ import { MAT_DIALOG_DATA as MAT_DIALOG_DATA, MatDialog as MatDialog, MatDialogRe
 import { FlexHeadComponent } from './flex-head/flex-head.component';
 import { FlexEventComponent } from './flex-event/flex-event.component';
 import { FlexActionComponent } from './flex-action/flex-action.component';
-<<<<<<< HEAD
-import { ButtonActionMode, GaugeProperty, GaugeSettings, View, WidgetProperty } from '../../_models/hmi';
-=======
-import { GaugeProperty, GaugeSettings, GaugeShapeStyle, IPropertyVariable, View, WidgetProperty } from '../../_models/hmi';
->>>>>>> origin/feature/multi-sites
+import { ButtonActionMode, GaugeProperty, GaugeSettings, GaugeShapeStyle, IPropertyVariable, View, WidgetProperty } from '../../_models/hmi';
 import { Script } from '../../_models/script';
 import { PropertyType } from './flex-input/flex-input.component';
 import { PermissionData, PermissionDialogComponent } from './permission-dialog/permission-dialog.component';

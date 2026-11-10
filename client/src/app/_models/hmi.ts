@@ -232,8 +232,8 @@ export class GaugeProperty {
     text: string;               // Text property (used by button)
     icon?: string;              // Optional Material icon (used by button)
     image?: string;             // Optional image resource (used by button)
-<<<<<<< HEAD
     buttonAction?: ButtonActionProperty;    // Optional toggle/press action (used by button)
+    style?: GaugeShapeStyle;
 }
 
 export enum ButtonActionMode {
@@ -254,9 +254,6 @@ export interface ButtonActionProperty {
     showPressed?: boolean;      // render the button as pressed while active
     activeLabel?: string;       // optional label shown when the button state changes to active
     inactiveLabel?: string;     // optional label shown when the button state changes to inactive
-=======
-    style?: GaugeShapeStyle;
->>>>>>> origin/feature/multi-sites
 }
 
 export interface PermissionRoles {
