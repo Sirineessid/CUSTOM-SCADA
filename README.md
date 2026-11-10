@@ -247,6 +247,18 @@ For full contribution guidelines (code and documentation), please read:
 ## 💬 Let us know!
 We’d be really happy if you send us your own shapes in order to collect a library to share it with others. Just send an email to info@frangoteam.org and do let us know if you have any questions or suggestions regarding our work.
 
+## PostgreSQL support
+
+FUXA includes a native PostgreSQL device for browsing databases, tables, and columns, reading table rows and distinct tag values, and using database-backed select options. Configure the device connection in the editor; device credentials are stored with the project configuration.
+
+The PostgreSQL Explorer integration adds an administrator-only database/table picker for custom widgets:
+
+- The explorer endpoints are available at `/api/dbexplorer/databases` and `/api/dbexplorer/tables?db=DATABASE`.
+- The standalone picker is served at `http://localhost:1881/_widgets/dbexplorer.html`.
+- The two-dropdown control is available from **Editor → Widgets → controls**.
+
+Set `PG_USER` and `PG_PASSWORD` for the FUXA server process. `PG_HOST` defaults to `127.0.0.1` and `PG_PORT` defaults to `5432`. Use a PostgreSQL role with read-only access and permission to connect to the databases being listed. Do not commit credentials.
+
 ## <a href="https://discord.gg/WZhxz9uHh4" target="_blank" > <img src="https://skillicons.dev/icons?i=discord" alt=""></a>
 
 ## 📄 License
