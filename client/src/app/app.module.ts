@@ -50,6 +50,8 @@ import { DeviceEnipmoduleComponent } from './device/device-enipmodule/device-eni
 import { TagOptionsComponent } from './device/tag-options/tag-options.component';
 import { TopicPropertyComponent } from './device/topic-property/topic-property.component';
 import { DeviceListComponent } from './device/device-list/device-list.component';
+import { S7ImportComponent } from './device/s7-import/s7-import.component';
+import { S7ExploreComponent } from './device/s7-import/s7-explore.component';
 import { DeviceMapComponent } from './device/device-map/device-map.component';
 import { FuxaViewComponent } from './fuxa-view/fuxa-view.component';
 import { CardsViewComponent } from './cards-view/cards-view.component';
@@ -103,6 +105,10 @@ import { ChartPropertyComponent } from './gauges/controls/html-chart/chart-prope
 import { FlexInputComponent } from './gauges/gauge-property/flex-input/flex-input.component';
 import { FlexAuthComponent } from './gauges/gauge-property/flex-auth/flex-auth.component';
 import { FlexHeadComponent } from './gauges/gauge-property/flex-head/flex-head.component';
+import { GaugeGeneralTabComponent } from './gauges/gauge-property/custom-tabs/general-tab.component';
+import { GaugeLabelTabComponent } from './gauges/gauge-property/custom-tabs/label-tab.component';
+import { GaugeAdvancedTabComponent } from './gauges/gauge-property/custom-tabs/advanced-tab.component';
+import { GaugeVisibilityTabComponent } from './gauges/gauge-property/custom-tabs/visibility-tab.component';
 import { FlexEventComponent } from './gauges/gauge-property/flex-event/flex-event.component';
 import { FlexActionComponent } from './gauges/gauge-property/flex-action/flex-action.component';
 import { FlexActionsStandaloneComponent } from './gauges/gauge-property/flex-actions-standalone/flex-actions-standalone.component';
@@ -196,6 +202,9 @@ import { TagPropertyEditGenericEthernetIPComponent } from './device/tag-property
 import { ViewPropertyComponent } from './editor/view-property/view-property.component';
 import { ResizeDirective } from './_directives/resize.directive';
 import { EditorViewsListComponent } from './editor/editor-views-list/editor-views-list.component';
+import { EditorSitesListComponent } from './editor/editor-sites-list/editor-sites-list.component';
+import { SiteCurvesDialogComponent } from './editor/editor-sites-list/site-curves-dialog/site-curves-dialog.component';
+import { SiteHistoryDialogComponent } from './editor/editor-sites-list/site-history-dialog/site-history-dialog.component';
 import { SvgUtils } from './_helpers/svg-utils';
 import { FlexWidgetPropertyComponent } from './gauges/gauge-property/flex-widget-property/flex-widget-property.component';
 import { GraphSourceEditComponent } from './editor/graph-config/graph-source-edit/graph-source-edit.component';
@@ -297,6 +306,8 @@ export const myCustomTooltipDefaults: MatTooltipDefaultOptions = {
         LayoutMenuItemPropertyComponent,
         LayoutHeaderItemPropertyComponent,
         DeviceListComponent,
+        S7ImportComponent,
+        S7ExploreComponent,
         DeviceMapComponent,
         FuxaViewComponent,
         FuxaViewDialogComponent,
@@ -338,6 +349,10 @@ export const myCustomTooltipDefaults: MatTooltipDefaultOptions = {
         FlexDeviceTagComponent,
         FlexAuthComponent,
         FlexHeadComponent,
+        GaugeGeneralTabComponent,
+        GaugeLabelTabComponent,
+        GaugeAdvancedTabComponent,
+        GaugeVisibilityTabComponent,
         FlexEventComponent,
         FlexActionComponent,
         FlexActionsStandaloneComponent,
@@ -420,6 +435,9 @@ export const myCustomTooltipDefaults: MatTooltipDefaultOptions = {
         WebcamPlayerDialogComponent,
         ResizeDirective,
         EditorViewsListComponent,
+        EditorSitesListComponent,
+        SiteCurvesDialogComponent,
+        SiteHistoryDialogComponent,
         MapsLocationListComponent,
         MapsLocationPropertyComponent,
         MapsViewComponent,

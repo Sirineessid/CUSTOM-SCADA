@@ -22,6 +22,7 @@
                 <!-- Checkbox Column -->
                 <ng-container matColumnDef="select">
                     <mat-header-cell *matHeaderCellDef [ngClass]="'selectidthClass'">
+<<<<<<< HEAD
                         <ng-container *ngIf="!readonly && isDeviceToEdit && deviceSelected?.type === deviceType.SNMP; else simpleAdd">
                             <button mat-icon-button [matMenuTriggerFor]="addMenu" class="remove" matTooltip="{{'device.list-add' | translate}}">
                                 <mat-icon>add</mat-icon>
@@ -36,6 +37,18 @@
                                 <mat-icon>add</mat-icon>
                             </button>
                         </ng-template>
+=======
+                        <button *ngIf="!readonly && isDeviceToEdit" mat-icon-button (click)="onAddTag()" class="remove" matTooltip="{{'device.list-add' | translate}}">
+                            <mat-icon>add</mat-icon>
+                        </button>
+                        <!-- custom-SCADA: import the variables of a Siemens PLC from TIA Portal exports -->
+                        <button *ngIf="!readonly && deviceSelected?.type === deviceType.SiemensS7" mat-icon-button (click)="onImportS7()" class="remove" matTooltip="{{'device.s7import-title' | translate}}">
+                            <mat-icon>file_upload</mat-icon>
+                        </button>
+                        <button *ngIf="!readonly && deviceSelected?.type === deviceType.SiemensS7" mat-icon-button (click)="onExploreS7()" class="remove" matTooltip="{{'device.s7explore-title' | translate}}">
+                            <mat-icon>travel_explore</mat-icon>
+                        </button>
+>>>>>>> origin/feature/multi-sites
                     </mat-header-cell>
                     <mat-cell *matCellDef="let element" [ngClass]="'selectidthClass'">
                         <button mat-icon-button (click)="onEditRow(element)" class="remove" matTooltip="{{'device.list-edit' | translate}}"

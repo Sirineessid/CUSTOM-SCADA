@@ -105,7 +105,8 @@ try {
 
     settings.workDir = workDir;
     settings.appDir = __dirname;
-    settings.packageDir = path.resolve(rootDir, '_pkg');
+    // custom-SCADA: the instances of the sites use the plugins of the main FUXA
+    settings.packageDir = process.env.FUXA_PACKAGE_DIR || path.resolve(rootDir, '_pkg');
     settings.settingsFile = settingsFile;
     settings.environment = process.env.NODE_ENV || 'prod';
     settings.uploadFileDir = '_upload_files';
@@ -340,6 +341,10 @@ settings.uiHost = settings.uiHost || "0.0.0.0";
 // Wait ending initialization
 events.once('init-runtime-ok', function () {
     logger.info('FUXA init in  ' + utils.endTime(startTime) + 'ms.');
+    // custom-SCADA: instance of a site, its HTML files are written in its folder after each save
+    if (process.env.FUXA_SITE) {
+        require('./runtime/sites/files').init(runtime, settings, logger, process.env.FUXA_SITE);
+    }
     startFuxa();
     initWebcamSnapshotCleanup();
 });
@@ -456,6 +461,14 @@ const SHELL_ROUTES = [
 ];
 
 app.use(allowCrossDomain);
+
+// custom-SCADA: multi-sites (/site/<name>/ and /api/sites), only in the main FUXA, not in the instances of the sites
+if (!process.env.FUXA_SITE) {
+    require('./runtime/sites').init(app, server, settings, logger);
+} else {
+    // instance of a site: API of the site (tags, values, history) under /site/<name>/api/site
+    app.use(BASE_PATH + '/api/site', require('./runtime/sites/api').router(runtime, settings, process.env.FUXA_SITE));
+}
 
 if (indexHtmlCache) {
     const serveShell = (req, res) => res.type('html').send(indexHtmlCache);

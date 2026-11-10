@@ -4,13 +4,18 @@ import { MAT_DIALOG_DATA as MAT_DIALOG_DATA, MatDialog as MatDialog, MatDialogRe
 import { FlexHeadComponent } from './flex-head/flex-head.component';
 import { FlexEventComponent } from './flex-event/flex-event.component';
 import { FlexActionComponent } from './flex-action/flex-action.component';
+<<<<<<< HEAD
 import { ButtonActionMode, GaugeProperty, GaugeSettings, View, WidgetProperty } from '../../_models/hmi';
+=======
+import { GaugeProperty, GaugeSettings, GaugeShapeStyle, IPropertyVariable, View, WidgetProperty } from '../../_models/hmi';
+>>>>>>> origin/feature/multi-sites
 import { Script } from '../../_models/script';
 import { PropertyType } from './flex-input/flex-input.component';
 import { PermissionData, PermissionDialogComponent } from './permission-dialog/permission-dialog.component';
 import { SettingsService } from '../../_services/settings.service';
 import { Device } from '../../_models/device';
 import { HtmlButtonComponent } from '../controls/html-button/html-button.component';
+import { ShapeStyleHelper } from './custom-tabs/shape-style.helper';
 
 @Component({
     selector: 'gauge-property',
@@ -36,6 +41,7 @@ export class GaugePropertyComponent implements AfterViewInit {
     defaultValue: any;
     inputs: GaugeSettings[];
     scripts: Script[];
+    private hadStyle = false;
 
     constructor(public dialog: MatDialog,
                 public dialogRef: MatDialogRef<GaugePropertyComponent>,
@@ -52,6 +58,8 @@ export class GaugePropertyComponent implements AfterViewInit {
         if (!this.property) {
             this.property = new GaugeProperty();
         }
+        this.hadStyle = !!this.property.style;
+        this.property.style = GaugeShapeStyle.withDefaults(this.property.style);
     }
 
     ngAfterViewInit() {
@@ -78,6 +86,17 @@ export class GaugePropertyComponent implements AfterViewInit {
         }
     }
 
+    onGeneralTagChange(event: IPropertyVariable) {
+        if (this.flexHead) {
+            this.flexHead.setVariable(event);
+        } else {
+            this.property.variableId = event.variableId;
+            this.property.variableValue = event.variableValue;
+            this.property.bitmask = event.bitmask;
+        }
+        this.cdr.detectChanges();
+    }
+
     onNoClick(): void {
         this.dialogRef.close();
     }
@@ -98,6 +117,10 @@ export class GaugePropertyComponent implements AfterViewInit {
             this.property.readonly = true;
         } else {
             delete this.property.readonly;
+        }
+        // custom-SCADA: keep the style only if the user changed it, so untouched objects are not restyled
+        if (!this.hadStyle && this.data.settings.property?.style && ShapeStyleHelper.isDefault(this.data.settings.property.style)) {
+            delete this.data.settings.property.style;
         }
     }
 

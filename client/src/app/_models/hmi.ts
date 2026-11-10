@@ -232,6 +232,7 @@ export class GaugeProperty {
     text: string;               // Text property (used by button)
     icon?: string;              // Optional Material icon (used by button)
     image?: string;             // Optional image resource (used by button)
+<<<<<<< HEAD
     buttonAction?: ButtonActionProperty;    // Optional toggle/press action (used by button)
 }
 
@@ -253,6 +254,9 @@ export interface ButtonActionProperty {
     showPressed?: boolean;      // render the button as pressed while active
     activeLabel?: string;       // optional label shown when the button state changes to active
     inactiveLabel?: string;     // optional label shown when the button state changes to inactive
+=======
+    style?: GaugeShapeStyle;
+>>>>>>> origin/feature/multi-sites
 }
 
 export interface PermissionRoles {
@@ -819,3 +823,88 @@ export interface VideoOptions {
     loop?: boolean;
 }
 
+export class GaugeShapeStyle {
+    general: GaugeShapeGeneral = new GaugeShapeGeneral();
+    label: GaugeShapeLabel = new GaugeShapeLabel();
+    advanced: GaugeShapeAdvanced = new GaugeShapeAdvanced();
+    visibility: GaugeShapeVisibility = new GaugeShapeVisibility();
+
+    static withDefaults(style?: Partial<GaugeShapeStyle>): GaugeShapeStyle {
+        const result = new GaugeShapeStyle();
+        Object.assign(result.general, style?.general);
+        Object.assign(result.label, style?.label);
+        Object.assign(result.advanced, style?.advanced);
+        Object.assign(result.visibility, style?.visibility);
+        return result;
+    }
+}
+
+export type GaugeShapeZoomMode = 'gain' | 'formula';
+
+export class GaugeShapeAdvanced {
+    zoom = false;
+    /** gain: value x gain + offset, formula: math formula with x = value (FormulaHelper) */
+    zoomMode: GaugeShapeZoomMode = 'gain';
+    zoomFormula = '';
+    zoomGain = 1;
+    zoomOffset = 0;
+    /** gain and offset read from tags */
+    zoomTransform = false;
+    zoomGainVariableId = '';
+    zoomOffsetVariableId = '';
+    zoomDisplay = '*';
+    displayRange = false;
+    /** min and max read from tags */
+    rangeDynamic = false;
+    rangeMin = 0;
+    rangeMax = 65535;
+    rangeMinVariableId = '';
+    rangeMaxVariableId = '';
+    highTextColor = '#000000';
+    highBackgroundColor = '#ff0000';
+    lowTextColor = '#000000';
+    lowBackgroundColor = '#00ff00';
+    ratioDisplay = false;
+    ratioDynamic = false;
+    ratioMin = 0;
+    ratioMax = 65535;
+    ratioMinVariableId = '';
+    ratioMaxVariableId = '';
+}
+
+export type GaugeShapeCondition = 'eq' | 'ne' | 'gt' | 'ge' | 'lt' | 'le';
+
+export class GaugeShapeVisibility {
+    byBit = false;
+    bitVariableId = '';
+    bitShowWhen: 'on' | 'off' = 'on';
+    byWord = false;
+    wordVariableId = '';
+    wordCondition: GaugeShapeCondition = 'eq';
+    wordValue = 0;
+    penetration = false;
+}
+
+export class GaugeShapeGeneral {
+    borderColor = '#0000ff';
+    foreground = '#000000';
+    background = '#ffff00';
+    pattern: 'solid' | 'hatch' | 'none' = 'solid';
+    dataType: 'int16' | 'uint16' | 'int32' | 'uint32' | 'float32' | 'float64' | 'bool' | 'string' = 'float32';
+    totalDigits = 5;
+    fractionalDigits = 2;
+    zeroPadding = false;
+}
+
+export class GaugeShapeLabel {
+    text = '888.88';
+    fontFamily = 'Arial';
+    fontSize = 16;
+    bold = false;
+    italic = false;
+    underline = false;
+    color = '#000000';
+    wordSpacing = 0;
+    position: 'left' | 'center' | 'right' = 'center';
+    image = '';
+}
