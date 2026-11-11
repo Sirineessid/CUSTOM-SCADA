@@ -76,6 +76,7 @@ export class DevicePropertyComponent implements OnInit, OnDestroy {
 	databitsType = [7, 8];
 	stopbitsType = [1, 1.5, 2];
 	parityType = ['None', 'Odd', 'Even'];
+	melsecFrameType = ['1E', '3E'];
 	methodType = ['GET'];//, 'POST'];
 	parserType = ['JSON'];//, 'CSV'];
 	hostInterfaces = [];
@@ -191,7 +192,8 @@ export class DevicePropertyComponent implements OnInit, OnDestroy {
 		});
 		// check security
 		if (this.data.device.id && (this.data.device.type === DeviceType.OPCUA || this.data.device.type === DeviceType.MQTTclient
-			|| this.data.device.type === DeviceType.ODBC || this.data.device.type === DeviceType.SNMP)) {
+			|| this.data.device.type === DeviceType.ODBC || this.data.device.type === DeviceType.SNMP ||
+			this.data.device.type === DeviceType.PostgreSQL)) {
 			this.projectService.getDeviceSecurity(this.data.device.id).pipe(
 				delay(500)
 			).subscribe(result => {
@@ -455,7 +457,7 @@ export class DevicePropertyComponent implements OnInit, OnDestroy {
 				};
 				return result;
 			}
-		} else if (this.data.device.type === DeviceType.ODBC) {
+		} else if (this.data.device.type === DeviceType.ODBC || this.data.device.type === DeviceType.PostgreSQL) {
 			if (this.tableRadio || this.security.username || this.security.password) {
 				let result = <DeviceSecurityGeneral>{
 					mode: this.tableRadio,

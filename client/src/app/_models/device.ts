@@ -255,6 +255,8 @@ export class DeviceNetProperty {
     address: string;
     /** Address port */
     port: string;
+    /** PostgreSQL column used to order latest-row reads */
+    orderBy?: string;
     /** Slot number used for Siemens S7 connection */
     slot: string;
     /** Rack number used for Siemens S7 connection */
@@ -286,6 +288,8 @@ export class DeviceNetProperty {
     /** MELSEC */
     ascii?: boolean;
     octalIO?: boolean;
+    /** MELSEC MC protocol frame: '1E' (default) or '3E' (Q/L/iQ built-in Ethernet) */
+    frame?: string;
     timeout?: number;
 
     static descriptor = {
@@ -338,6 +342,7 @@ export enum DeviceType {
     GenericEthernetIP = 'GenericEthernetIP',
     OmronEthernetIP = 'OmronEthernetIP',
     ODBC = 'ODBC',
+    PostgreSQL = 'PostgreSQL',
     ADSclient = 'ADSclient',
     GPIO = 'GPIO',
     WebCam = 'WebCam',
@@ -500,8 +505,8 @@ export enum SnmpTagType {
 export class SnmpOptions {
     version: SnmpVersion = SnmpVersion.v3;
     transport: SnmpTransport = SnmpTransport.udp4;
-    /** Request timeout in millisec. */
-    timeout = 5000;
+    /** Request timeout in millisec., keep timeout * (retries + 1) below the polling interval (default 3000) */
+    timeout = 1000;
     retries = 1;
     /** SNMP v3 */
     securityLevel: SnmpSecurityLevel = SnmpSecurityLevel.authPriv;

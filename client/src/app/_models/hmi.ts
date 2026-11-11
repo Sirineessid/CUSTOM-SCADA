@@ -228,6 +228,8 @@ export class GaugeProperty {
     events: GaugeEvent[] = [];
     actions: GaugeAction[] = [];
     options: any;
+    optionSourceTagId?: string;
+    optionRefreshTagId?: string;
     readonly: boolean;
     text: string;               // Text property (used by button)
     icon?: string;              // Optional Material icon (used by button)
@@ -819,7 +821,6 @@ export interface VideoOptions {
     showControls?: boolean;
     loop?: boolean;
 }
-
 export class GaugeShapeStyle {
     general: GaugeShapeGeneral = new GaugeShapeGeneral();
     label: GaugeShapeLabel = new GaugeShapeLabel();
