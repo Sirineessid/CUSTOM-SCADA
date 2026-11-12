@@ -3804,6 +3804,55 @@ let SvgUtils = class SvgUtils {
       }
     }
   }
+  static applyWidgetAppearance(svgElement, appearance) {
+    if (!svgElement || !appearance) {
+      return;
+    }
+    const shapes = svgElement.querySelectorAll('path, rect, circle, ellipse, line, polyline, polygon, text, use');
+    shapes.forEach(shape => {
+      if (appearance.fill) {
+        shape.setAttribute('fill', appearance.fill);
+      }
+      if (appearance.stroke) {
+        shape.setAttribute('stroke', appearance.stroke);
+      }
+      if (Number.isFinite(appearance.strokeWidth)) {
+        shape.setAttribute('stroke-width', appearance.strokeWidth.toString());
+      }
+    });
+    svgElement.style.transform = appearance.rotation ? `rotate(${appearance.rotation}deg)` : '';
+    svgElement.style.transformOrigin = 'center';
+    let label = svgElement.querySelector('#fuxa-widget-label');
+    if (appearance.label?.trim()) {
+      if (!label) {
+        label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('id', 'fuxa-widget-label');
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('font-size', '4');
+        const viewBox = svgElement.viewBox.baseVal;
+        label.setAttribute('x', (viewBox.x + viewBox.width / 2).toString());
+        label.setAttribute('y', (viewBox.y + viewBox.height - 1).toString());
+        svgElement.appendChild(label);
+      }
+      label.textContent = appearance.label;
+      label.setAttribute('fill', appearance.labelColor || '#000000');
+    } else {
+      label?.remove();
+    }
+  }
+  static applyWidgetRangeColor(svgElement, fill, stroke) {
+    if (!svgElement) {
+      return;
+    }
+    svgElement.querySelectorAll('path, rect, circle, ellipse, line, polyline, polygon, text, use').forEach(shape => {
+      if (fill) {
+        shape.setAttribute('fill', fill);
+      }
+      if (stroke) {
+        shape.setAttribute('stroke', stroke);
+      }
+    });
+  }
   static validateVariable(variable) {
     if (variable.type === 'number' && !_utils__WEBPACK_IMPORTED_MODULE_0__.Utils.isNumeric(variable.variableValue)) {
       return false;
@@ -6548,6 +6597,7 @@ class WidgetProperty extends GaugeProperty {
   scriptContent;
   svgContent;
   varsToBind = [];
+  symbolAppearance;
 }
 var InputOptionType;
 (function (InputOptionType) {
@@ -29554,15 +29604,15 @@ let EditorComponent = class EditorComponent {
           } else if (this.resourcesService.isVideo(this.imagefile)) {
             this.setModeParam = this.imagefile;
             self.setMode('own_ctrl-video');
+          } else {
+            const svgEditor = self.winRef.nativeWindow.svgEditor;
+            if (typeof svgEditor.setUrlImageToAdd !== 'function') {
+              console.error('SVG editor does not support image insertion');
+              return;
+            }
+            svgEditor.setUrlImageToAdd(self.imagefile);
+            self.setMode('image');
           }
-          // } else {
-          //     this.getBase64Image(result, function (imgdata) {
-          //         if (self.winRef.nativeWindow.svgEditor.setUrlImageToAdd) {
-          //             self.winRef.nativeWindow.svgEditor.setUrlImageToAdd(imgdata);
-          //         }
-          //         self.setMode('image');
-          //     });
-          // }
         }
       }
     });
@@ -38994,6 +39044,7 @@ let HtmlImageComponent = class HtmlImageComponent extends _gauge_base_gauge_base
           } else {
             svgImageContainer.appendChild(svgElement);
           }
+          _helpers_svg_utils__WEBPACK_IMPORTED_MODULE_7__.SvgUtils.applyWidgetAppearance(svgImageContainer.querySelector('svg'), gaugeSettings.property.symbolAppearance);
           if (gaugeSettings.property.scriptContent) {
             const newScript = document.createElement('script');
             newScript.textContent = _helpers_svg_utils__WEBPACK_IMPORTED_MODULE_7__.SvgUtils.initWidget(gaugeSettings.property.scriptContent.content, gaugeSettings.property.varsToBind);
@@ -39097,10 +39148,18 @@ let HtmlImageComponent = class HtmlImageComponent extends _gauge_base_gauge_base
             }
             // check if general shape (line/path/fpath/text) to set the stroke
             if (propertyColor.fill) {
-              svgele.node.setAttribute('fill', propertyColor.fill);
+              if (ga.property.type === HtmlImageComponent_1.propertyWidgetType && ga.property.symbolAppearance) {
+                _helpers_svg_utils__WEBPACK_IMPORTED_MODULE_7__.SvgUtils.applyWidgetRangeColor(svgele.node.querySelector('svg'), propertyColor.fill);
+              } else {
+                svgele.node.setAttribute('fill', propertyColor.fill);
+              }
             }
             if (propertyColor.stroke) {
-              svgele.node.setAttribute('stroke', propertyColor.stroke);
+              if (ga.property.type === HtmlImageComponent_1.propertyWidgetType && ga.property.symbolAppearance) {
+                _helpers_svg_utils__WEBPACK_IMPORTED_MODULE_7__.SvgUtils.applyWidgetRangeColor(svgele.node.querySelector('svg'), undefined, propertyColor.stroke);
+              } else {
+                svgele.node.setAttribute('stroke', propertyColor.stroke);
+              }
             }
           }
           // check actions
@@ -50824,10 +50883,11 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var _flex_widget_property_component_html_ngResource__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ./flex-widget-property.component.html?ngResource */ 65497);
 /* harmony import */ var _flex_widget_property_component_scss_ngResource__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./flex-widget-property.component.scss?ngResource */ 6727);
 /* harmony import */ var _flex_widget_property_component_scss_ngResource__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_flex_widget_property_component_scss_ngResource__WEBPACK_IMPORTED_MODULE_1__);
-/* harmony import */ var _angular_core__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! @angular/core */ 37580);
+/* harmony import */ var _angular_core__WEBPACK_IMPORTED_MODULE_6__ = __webpack_require__(/*! @angular/core */ 37580);
 /* harmony import */ var _models_hmi__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../../../_models/hmi */ 53276);
 /* harmony import */ var _services_project_service__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ../../../_services/project.service */ 27324);
 /* harmony import */ var _helpers_svg_utils__WEBPACK_IMPORTED_MODULE_4__ = __webpack_require__(/*! ../../../_helpers/svg-utils */ 16415);
+/* harmony import */ var _flex_input_flex_input_component__WEBPACK_IMPORTED_MODULE_5__ = __webpack_require__(/*! ../flex-input/flex-input.component */ 70771);
 var __decorate = undefined && undefined.__decorate || function (decorators, target, key, desc) {
   var c = arguments.length,
     r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc,
@@ -50844,19 +50904,20 @@ var __metadata = undefined && undefined.__metadata || function (k, v) {
 
 
 
+
 let FlexWidgetPropertyComponent = class FlexWidgetPropertyComponent {
   projectService;
   property;
-  dataDevices = {
-    devices: []
-  };
+  data;
+  rangePropertyType = _flex_input_flex_input_component__WEBPACK_IMPORTED_MODULE_5__.PropertyType.range;
   constructor(projectService) {
     this.projectService = projectService;
-    this.dataDevices = {
-      devices: Object.values(this.projectService.getDevices())
-    };
   }
   ngOnInit() {
+    this.data = this.data || {
+      devices: Object.values(this.projectService.getDevices())
+    };
+    this.property.symbolAppearance = this.property.symbolAppearance || {};
     // Populate defaults from SVG script if available
     if (this.property?.varsToBind?.length && this.property?.scriptContent?.content) {
       this.property.varsToBind = _helpers_svg_utils__WEBPACK_IMPORTED_MODULE_4__.SvgUtils.populateDefaults(this.property.scriptContent.content, this.property.varsToBind);
@@ -50867,11 +50928,14 @@ let FlexWidgetPropertyComponent = class FlexWidgetPropertyComponent {
   }];
   static propDecorators = {
     property: [{
-      type: _angular_core__WEBPACK_IMPORTED_MODULE_5__.Input
+      type: _angular_core__WEBPACK_IMPORTED_MODULE_6__.Input
+    }],
+    data: [{
+      type: _angular_core__WEBPACK_IMPORTED_MODULE_6__.Input
     }]
   };
 };
-FlexWidgetPropertyComponent = __decorate([(0,_angular_core__WEBPACK_IMPORTED_MODULE_5__.Component)({
+FlexWidgetPropertyComponent = __decorate([(0,_angular_core__WEBPACK_IMPORTED_MODULE_6__.Component)({
   selector: 'flex-widget-property',
   template: _flex_widget_property_component_html_ngResource__WEBPACK_IMPORTED_MODULE_0__,
   styles: [(_flex_widget_property_component_scss_ngResource__WEBPACK_IMPORTED_MODULE_1___default())]
@@ -51014,6 +51078,7 @@ let GaugePropertyComponent = class GaugePropertyComponent {
   }
   onOkClick() {
     if (this.isWidget()) {
+      this.flexHead?.getProperty();
       this.data.settings.property = this.property;
     } else {
       this.data.settings.property = this.flexHead?.getProperty();
@@ -80669,6 +80734,21 @@ var ___CSS_LOADER_EXPORT___ = ___CSS_LOADER_API_IMPORT___(___CSS_LOADER_API_SOUR
 ___CSS_LOADER_EXPORT___.push([module.id, `:host .container {
   margin-top: 20px;
 }
+:host .symbol-appearance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+:host .symbol-appearance h3 {
+  flex-basis: 100%;
+  margin: 0;
+}
+:host .symbol-appearance .my-form-field {
+  display: flex;
+  flex-direction: column;
+}
 :host .var-ref {
   display: block;
 }
@@ -80685,7 +80765,7 @@ ___CSS_LOADER_EXPORT___.push([module.id, `:host .container {
   margin-left: 5px;
   margin-right: 5px;
   display: inline-block;
-}`, "",{"version":3,"sources":["webpack://./src/app/gauges/gauge-property/flex-widget-property/flex-widget-property.component.scss"],"names":[],"mappings":"AACI;EACI,gBAAA;AAAR;AAEI;EACI,cAAA;AAAR;AACQ;EACI,qBAAA;AACZ;AACY;EACI,kBAAA;AAChB;AACY;EACI,gBAAA;AAChB;AAEQ;EACI,gBAAA;EACA,iBAAA;EACA,qBAAA;AAAZ","sourcesContent":[":host {\r\n    .container {\r\n        margin-top: 20px;\r\n    }\r\n    .var-ref {\r\n        display: block;\r\n        flex-variable {\r\n            display: inline-block;\r\n\r\n            ::ng-deep .value {\r\n                margin-right: 10px;\r\n            }\r\n            ::ng-deep .variable-input {\r\n                min-width: 400px;\r\n            }\r\n        }\r\n        span {\r\n            margin-left: 5px;\r\n            margin-right: 5px;\r\n            display: inline-block;\r\n        }\r\n    }\r\n}"],"sourceRoot":""}]);
+}`, "",{"version":3,"sources":["webpack://./src/app/gauges/gauge-property/flex-widget-property/flex-widget-property.component.scss"],"names":[],"mappings":"AACI;EACI,gBAAA;AAAR;AAEI;EACI,aAAA;EACA,eAAA;EACA,gBAAA;EACA,aAAA;EACA,mBAAA;AAAR;AAEQ;EACI,gBAAA;EACA,SAAA;AAAZ;AAGQ;EACI,aAAA;EACA,sBAAA;AADZ;AAII;EACI,cAAA;AAFR;AAGQ;EACI,qBAAA;AADZ;AAGY;EACI,kBAAA;AADhB;AAGY;EACI,gBAAA;AADhB;AAIQ;EACI,gBAAA;EACA,iBAAA;EACA,qBAAA;AAFZ","sourcesContent":[":host {\r\n    .container {\r\n        margin-top: 20px;\r\n    }\r\n    .symbol-appearance {\r\n        display: flex;\r\n        flex-wrap: wrap;\r\n        align-items: end;\r\n        gap: 8px 16px;\r\n        margin-bottom: 12px;\r\n\r\n        h3 {\r\n            flex-basis: 100%;\r\n            margin: 0;\r\n        }\r\n\r\n        .my-form-field {\r\n            display: flex;\r\n            flex-direction: column;\r\n        }\r\n    }\r\n    .var-ref {\r\n        display: block;\r\n        flex-variable {\r\n            display: inline-block;\r\n\r\n            ::ng-deep .value {\r\n                margin-right: 10px;\r\n            }\r\n            ::ng-deep .variable-input {\r\n                min-width: 400px;\r\n            }\r\n        }\r\n        span {\r\n            margin-left: 5px;\r\n            margin-right: 5px;\r\n            display: inline-block;\r\n        }\r\n    }\r\n}"],"sourceRoot":""}]);
 // Exports
 module.exports = ___CSS_LOADER_EXPORT___.toString();
 
@@ -86157,7 +86237,7 @@ module.exports = "<div class=\"flex-variable-mapping\">\r\n    <button mat-icon-
 /***/ ((module) => {
 
 "use strict";
-module.exports = "<div class=\"container\">\r\n    <div *ngFor=\"let varRef of property.varsToBind\" class=\"var-ref\">\r\n        <div class=\"my-form-field\">\r\n            <input type=\"text\"\r\n                   [value]=\"varRef.originalName\"\r\n                   [readonly]=\"true\">\r\n        </div>\r\n        <span> - </span>\r\n        <div class=\"inbk\">\r\n            <flex-variable\r\n                    [data]=\"dataDevices\"\r\n                    [value]=\"varRef\"\r\n                    [withStaticValue]=\"true\"\r\n                    [withStaticType]=\"varRef.type\"\r\n                    [withBitmask]=\"false\">\r\n            </flex-variable>\r\n        </div>\r\n    </div>\r\n</div>";
+module.exports = "<div class=\"container\">\r\n    <div class=\"symbol-appearance\">\r\n        <h3>{{'gauges.widget-appearance' | translate}}</h3>\r\n        <div class=\"my-form-field\">\r\n            <label>{{'gauges.widget-fill' | translate}}</label>\r\n            <input [(ngModel)]=\"property.symbolAppearance.fill\" type=\"color\">\r\n        </div>\r\n        <div class=\"my-form-field\">\r\n            <label>{{'gauges.widget-stroke' | translate}}</label>\r\n            <input [(ngModel)]=\"property.symbolAppearance.stroke\" type=\"color\">\r\n        </div>\r\n        <div class=\"my-form-field\">\r\n            <label>{{'gauges.widget-stroke-width' | translate}}</label>\r\n            <input [(ngModel)]=\"property.symbolAppearance.strokeWidth\" type=\"number\" min=\"0\" step=\"0.5\">\r\n        </div>\r\n        <div class=\"my-form-field\">\r\n            <label>{{'gauges.widget-rotation' | translate}}</label>\r\n            <input [(ngModel)]=\"property.symbolAppearance.rotation\" type=\"number\">\r\n        </div>\r\n        <div class=\"my-form-field\">\r\n            <label>{{'gauges.widget-label' | translate}}</label>\r\n            <input [(ngModel)]=\"property.symbolAppearance.label\" type=\"text\">\r\n        </div>\r\n        <div class=\"my-form-field\">\r\n            <label>{{'gauges.widget-label-color' | translate}}</label>\r\n            <input [(ngModel)]=\"property.symbolAppearance.labelColor\" type=\"color\">\r\n        </div>\r\n    </div>\r\n    <flex-head [data]=\"data\" [property]=\"property\" [withProperty]=\"rangePropertyType\"></flex-head>\r\n    <div *ngFor=\"let varRef of property.varsToBind\" class=\"var-ref\">\r\n        <div class=\"my-form-field\">\r\n            <input type=\"text\"\r\n                   [value]=\"varRef.originalName\"\r\n                   [readonly]=\"true\">\r\n        </div>\r\n        <span> - </span>\r\n        <div class=\"inbk\">\r\n            <flex-variable\r\n                    [data]=\"data\"\r\n                    [value]=\"varRef\"\r\n                    [withStaticValue]=\"true\"\r\n                    [withStaticType]=\"varRef.type\"\r\n                    [withBitmask]=\"false\">\r\n            </flex-variable>\r\n        </div>\r\n    </div>\r\n</div>";
 
 /***/ }),
 
@@ -86168,7 +86248,7 @@ module.exports = "<div class=\"container\">\r\n    <div *ngFor=\"let varRef of p
 /***/ ((module) => {
 
 "use strict";
-module.exports = "<div class=\"container\">\r\n    <h1 mat-dialog-title style=\"display:inline-block;cursor:move;\" mat-dialog-draggable>{{data.title}}</h1>\r\n    <mat-icon (click)=\"onNoClick()\" class=\"dialog-close-btn\">clear</mat-icon>\r\n    <div mat-dialog-content class=\"dialog-content\">\r\n\t\t<mat-tab-group style=\"width: 100%;\">\r\n\t\t\t<mat-tab label=\"{{'gauges.property-props' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<div>\r\n\t\t\t\t\t\t<div class=\"my-form-field\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-name' | translate}}</span>\r\n\t\t\t\t\t\t\t<input [(ngModel)]=\"data.settings.name\" style=\"width: 220px\" type=\"text\">\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"my-form-field ml10\" style=\"vertical-align: bottom;\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-permission' | translate}}</span>\r\n\t\t\t\t\t\t\t<div style=\"text-align:center;\" class=\"my-form-field-permission pointer\" (click)=\"onEditPermission()\">\r\n\t\t\t\t\t\t\t\t<mat-icon *ngIf=\"havePermission(); else unlock\"\r\n\t\t\t\t\t\t\t\t\t\tclass=\"header-icon\"\r\n\t\t\t\t\t\t\t\t\t\tstyle=\"line-height: 28px;\">lock</mat-icon>\r\n\t\t\t\t\t\t\t\t<ng-template #unlock>\r\n\t\t\t\t\t\t\t\t\t<mat-icon class=\"header-icon\"\r\n\t\t\t\t\t\t\t\t\t\t\tstyle=\"line-height: 28px;\">lock_open</mat-icon>\r\n\t\t\t\t\t\t\t\t</ng-template>\r\n\t\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"my-form-field ml10\" *ngIf=\"isTextToShow()\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-text' | translate}}</span>\r\n\t\t\t\t\t\t\t<input [(ngModel)]=\"property.text\" style=\"width: 250px\" type=\"text\" placeholder=\"{{'gauges.property-language-text' | translate}}\">\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"my-form-field ml10 icon-property-field\" *ngIf=\"isButton()\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-icon' | translate}}</span>\r\n\t\t\t\t\t\t\t<app-icon-selector\r\n\t\t\t\t\t\t\t\t[(value)]=\"property.icon\"\r\n\t\t\t\t\t\t\t\t[filterPlaceholder]=\"'gauges.property-icons-filter'\"\r\n\t\t\t\t\t\t\t\t(selected)=\"property.image = ''\">\r\n\t\t\t\t\t\t\t</app-icon-selector>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"my-form-field\" style=\"padding-left: 100px\" *ngIf=\"isReadonlyToShow()\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-readonly' | translate}}</span>\r\n\t\t\t\t\t\t\t<mat-slide-toggle color=\"primary\" [(ngModel)]=\"property.readonly\"></mat-slide-toggle>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"toolbox\" *ngIf=\"isToolboxToShow()\">\r\n\t\t\t\t\t\t\t<button mat-icon-button (click)=\"onAddInput()\">\r\n\t\t\t\t\t\t\t\t<mat-icon>add_circle_outline</mat-icon>\r\n\t\t\t\t\t\t\t</button>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div *ngIf=\"isSelectGauge()\" class=\"dynamic-options\">\r\n\t\t\t\t\t\t\t<flex-variable\r\n\t\t\t\t\t\t\t\t[data]=\"data\"\r\n\t\t\t\t\t\t\t\t[variableId]=\"property.optionSourceTagId\"\r\n\t\t\t\t\t\t\t\t[withStaticValue]=\"false\"\r\n\t\t\t\t\t\t\t\t[tagLabel]=\"'gauges.property-options-source'\"\r\n\t\t\t\t\t\t\t\t[tagTitle]=\"'gauges.property-options-source-title'\"\r\n\t\t\t\t\t\t\t\t(onchange)=\"onOptionSourceChanged($event)\">\r\n\t\t\t\t\t\t\t</flex-variable>\r\n\t\t\t\t\t\t\t<flex-variable\r\n\t\t\t\t\t\t\t\t*ngIf=\"property.optionSourceTagId\"\r\n\t\t\t\t\t\t\t\t[data]=\"data\"\r\n\t\t\t\t\t\t\t\t[variableId]=\"property.optionRefreshTagId\"\r\n\t\t\t\t\t\t\t\t[withStaticValue]=\"false\"\r\n\t\t\t\t\t\t\t\t[tagLabel]=\"'gauges.property-options-refresh-tag'\"\r\n\t\t\t\t\t\t\t\t[tagTitle]=\"'gauges.property-options-refresh-title'\"\r\n\t\t\t\t\t\t\t\t(onchange)=\"onOptionRefreshTagChanged($event)\">\r\n\t\t\t\t\t\t\t</flex-variable>\r\n\t\t\t\t\t\t\t<div class=\"option-config-message\" *ngIf=\"property.optionSourceTagId && !isSelectOptionsConfigurationValid()\">\r\n\t\t\t\t\t\t\t\t{{'gauges.property-options-invalid' | translate}}\r\n\t\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<div mat-dialog-content style=\"overflow: visible; width:100%;\">\r\n\t\t\t\t\t\t<flex-widget-property *ngIf=\"isWidget()\"\r\n\t\t\t\t\t\t\t\t\t\t\t[property]=\"property\">\r\n\t\t\t\t\t\t</flex-widget-property>\r\n\t\t\t\t\t\t<flex-head *ngIf=\"!isWidget()\" [data]=\"data\" [property]=\"property\" #flexhead [withBitmask]=\"withBitmask\" [hideRanges]=\"!!property.optionSourceTagId\"></flex-head>\r\n\t\t\t\t\t\t<button-action-property *ngIf=\"isButton()\" [property]=\"property\"></button-action-property>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.property-events' | translate}}\" *ngIf=\"eventsSupported\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<div class=\"toolbox\">\r\n\t\t\t\t\t\t<button mat-icon-button (click)=\"onAddEvent()\" matTooltip=\"{{'gauges.property-tooltip-add-event' | translate}}\">\r\n\t\t\t\t\t\t\t<mat-icon>add_circle_outline</mat-icon>\r\n\t\t\t\t\t\t</button>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<div mat-dialog-content style=\"overflow: visible; width:100%;\">\r\n\t\t\t\t\t\t<flex-event [property]=\"property\" [views]=\"views\" [data]=\"data\" [inputs]=\"inputs\" [scripts]=\"scripts\" #flexevent style=\"padding-bottom: 5px\"></flex-event>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.property-actions' | translate}}\" *ngIf=\"actionsSupported\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<div class=\"toolbox\">\r\n\t\t\t\t\t\t<button mat-icon-button (click)=\"onAddAction()\">\r\n\t\t\t\t\t\t\t<mat-icon>add_circle_outline</mat-icon>\r\n\t\t\t\t\t\t</button>\r\n\t\t\t\t\t\t<!-- <button mat-icon-button (click)=\"slideActionView = !slideActionView; onActionRangeViewToggle()\">\r\n\t\t\t\t\t\t\t<mat-icon class=\"header-icon\" *ngIf=\"slideActionView\">toll</mat-icon>\r\n\t\t\t\t\t\t\t<mat-icon class=\"header-icon\" *ngIf=\"!slideActionView\">input</mat-icon>\r\n\t\t\t\t\t\t</button>-->\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<div mat-dialog-content style=\"overflow: visible; width:100%\">\r\n\t\t\t\t\t\t<flex-action [data]=\"data\" [property]=\"property\" [withBitmask]=\"withBitmask\" #flexaction style=\"padding-bottom: 5px\">\r\n\t\t\t\t\t\t</flex-action>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<!-- custom-SCADA: pages General / Label / Advanced / Visibility -->\r\n\t\t\t<mat-tab label=\"{{'gauges.shape-tab-general' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<gauge-general-tab [data]=\"data\" [property]=\"property\" (tagChange)=\"onGeneralTagChange($event)\"></gauge-general-tab>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.shape-tab-label' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<gauge-label-tab [property]=\"property\"></gauge-label-tab>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.shape-tab-advanced' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<gauge-advanced-tab [data]=\"data\" [property]=\"property\"></gauge-advanced-tab>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.shape-tab-visibility' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<gauge-visibility-tab [data]=\"data\" [property]=\"property\"></gauge-visibility-tab>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t</mat-tab-group>\r\n    </div>\r\n    <div mat-dialog-actions class=\"dialog-action\">\r\n        <button mat-raised-button (click)=\"onNoClick()\">{{'dlg.cancel' | translate}}</button>\r\n        <button mat-raised-button color=\"primary\" (click)=\"onOkClick()\" [mat-dialog-close]=\"data\" [disabled]=\"isButtonActionInvalid() || !isSelectOptionsConfigurationValid()\" cdkFocusInitial>{{'dlg.ok' | translate}}</button>\r\n    </div>\r\n</div>\r\n";
+module.exports = "<div class=\"container\">\r\n    <h1 mat-dialog-title style=\"display:inline-block;cursor:move;\" mat-dialog-draggable>{{data.title}}</h1>\r\n    <mat-icon (click)=\"onNoClick()\" class=\"dialog-close-btn\">clear</mat-icon>\r\n    <div mat-dialog-content class=\"dialog-content\">\r\n\t\t<mat-tab-group style=\"width: 100%;\">\r\n\t\t\t<mat-tab label=\"{{'gauges.property-props' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<div>\r\n\t\t\t\t\t\t<div class=\"my-form-field\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-name' | translate}}</span>\r\n\t\t\t\t\t\t\t<input [(ngModel)]=\"data.settings.name\" style=\"width: 220px\" type=\"text\">\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"my-form-field ml10\" style=\"vertical-align: bottom;\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-permission' | translate}}</span>\r\n\t\t\t\t\t\t\t<div style=\"text-align:center;\" class=\"my-form-field-permission pointer\" (click)=\"onEditPermission()\">\r\n\t\t\t\t\t\t\t\t<mat-icon *ngIf=\"havePermission(); else unlock\"\r\n\t\t\t\t\t\t\t\t\t\tclass=\"header-icon\"\r\n\t\t\t\t\t\t\t\t\t\tstyle=\"line-height: 28px;\">lock</mat-icon>\r\n\t\t\t\t\t\t\t\t<ng-template #unlock>\r\n\t\t\t\t\t\t\t\t\t<mat-icon class=\"header-icon\"\r\n\t\t\t\t\t\t\t\t\t\t\tstyle=\"line-height: 28px;\">lock_open</mat-icon>\r\n\t\t\t\t\t\t\t\t</ng-template>\r\n\t\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"my-form-field ml10\" *ngIf=\"isTextToShow()\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-text' | translate}}</span>\r\n\t\t\t\t\t\t\t<input [(ngModel)]=\"property.text\" style=\"width: 250px\" type=\"text\" placeholder=\"{{'gauges.property-language-text' | translate}}\">\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"my-form-field ml10 icon-property-field\" *ngIf=\"isButton()\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-icon' | translate}}</span>\r\n\t\t\t\t\t\t\t<app-icon-selector\r\n\t\t\t\t\t\t\t\t[(value)]=\"property.icon\"\r\n\t\t\t\t\t\t\t\t[filterPlaceholder]=\"'gauges.property-icons-filter'\"\r\n\t\t\t\t\t\t\t\t(selected)=\"property.image = ''\">\r\n\t\t\t\t\t\t\t</app-icon-selector>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"my-form-field\" style=\"padding-left: 100px\" *ngIf=\"isReadonlyToShow()\">\r\n\t\t\t\t\t\t\t<span>{{'gauges.property-readonly' | translate}}</span>\r\n\t\t\t\t\t\t\t<mat-slide-toggle color=\"primary\" [(ngModel)]=\"property.readonly\"></mat-slide-toggle>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div class=\"toolbox\" *ngIf=\"isToolboxToShow()\">\r\n\t\t\t\t\t\t\t<button mat-icon-button (click)=\"onAddInput()\">\r\n\t\t\t\t\t\t\t\t<mat-icon>add_circle_outline</mat-icon>\r\n\t\t\t\t\t\t\t</button>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t<div *ngIf=\"isSelectGauge()\" class=\"dynamic-options\">\r\n\t\t\t\t\t\t\t<flex-variable\r\n\t\t\t\t\t\t\t\t[data]=\"data\"\r\n\t\t\t\t\t\t\t\t[variableId]=\"property.optionSourceTagId\"\r\n\t\t\t\t\t\t\t\t[withStaticValue]=\"false\"\r\n\t\t\t\t\t\t\t\t[tagLabel]=\"'gauges.property-options-source'\"\r\n\t\t\t\t\t\t\t\t[tagTitle]=\"'gauges.property-options-source-title'\"\r\n\t\t\t\t\t\t\t\t(onchange)=\"onOptionSourceChanged($event)\">\r\n\t\t\t\t\t\t\t</flex-variable>\r\n\t\t\t\t\t\t\t<flex-variable\r\n\t\t\t\t\t\t\t\t*ngIf=\"property.optionSourceTagId\"\r\n\t\t\t\t\t\t\t\t[data]=\"data\"\r\n\t\t\t\t\t\t\t\t[variableId]=\"property.optionRefreshTagId\"\r\n\t\t\t\t\t\t\t\t[withStaticValue]=\"false\"\r\n\t\t\t\t\t\t\t\t[tagLabel]=\"'gauges.property-options-refresh-tag'\"\r\n\t\t\t\t\t\t\t\t[tagTitle]=\"'gauges.property-options-refresh-title'\"\r\n\t\t\t\t\t\t\t\t(onchange)=\"onOptionRefreshTagChanged($event)\">\r\n\t\t\t\t\t\t\t</flex-variable>\r\n\t\t\t\t\t\t\t<div class=\"option-config-message\" *ngIf=\"property.optionSourceTagId && !isSelectOptionsConfigurationValid()\">\r\n\t\t\t\t\t\t\t\t{{'gauges.property-options-invalid' | translate}}\r\n\t\t\t\t\t\t\t</div>\r\n\t\t\t\t\t\t</div>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<div mat-dialog-content style=\"overflow: visible; width:100%;\">\r\n\t\t\t\t\t\t<flex-widget-property *ngIf=\"isWidget()\"\r\n\t\t\t\t\t\t\t\t\t\t\t[property]=\"property\"\r\n\t\t\t\t\t\t\t\t\t\t\t[data]=\"data\">\r\n\t\t\t\t\t\t</flex-widget-property>\r\n\t\t\t\t\t\t<flex-head *ngIf=\"!isWidget()\" [data]=\"data\" [property]=\"property\" #flexhead [withBitmask]=\"withBitmask\" [hideRanges]=\"!!property.optionSourceTagId\"></flex-head>\r\n\t\t\t\t\t\t<button-action-property *ngIf=\"isButton()\" [property]=\"property\"></button-action-property>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.property-events' | translate}}\" *ngIf=\"eventsSupported\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<div class=\"toolbox\">\r\n\t\t\t\t\t\t<button mat-icon-button (click)=\"onAddEvent()\" matTooltip=\"{{'gauges.property-tooltip-add-event' | translate}}\">\r\n\t\t\t\t\t\t\t<mat-icon>add_circle_outline</mat-icon>\r\n\t\t\t\t\t\t</button>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<div mat-dialog-content style=\"overflow: visible; width:100%;\">\r\n\t\t\t\t\t\t<flex-event [property]=\"property\" [views]=\"views\" [data]=\"data\" [inputs]=\"inputs\" [scripts]=\"scripts\" #flexevent style=\"padding-bottom: 5px\"></flex-event>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.property-actions' | translate}}\" *ngIf=\"actionsSupported\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<div class=\"toolbox\">\r\n\t\t\t\t\t\t<button mat-icon-button (click)=\"onAddAction()\">\r\n\t\t\t\t\t\t\t<mat-icon>add_circle_outline</mat-icon>\r\n\t\t\t\t\t\t</button>\r\n\t\t\t\t\t\t<!-- <button mat-icon-button (click)=\"slideActionView = !slideActionView; onActionRangeViewToggle()\">\r\n\t\t\t\t\t\t\t<mat-icon class=\"header-icon\" *ngIf=\"slideActionView\">toll</mat-icon>\r\n\t\t\t\t\t\t\t<mat-icon class=\"header-icon\" *ngIf=\"!slideActionView\">input</mat-icon>\r\n\t\t\t\t\t\t</button>-->\r\n\t\t\t\t\t</div>\r\n\t\t\t\t\t<div mat-dialog-content style=\"overflow: visible; width:100%\">\r\n\t\t\t\t\t\t<flex-action [data]=\"data\" [property]=\"property\" [withBitmask]=\"withBitmask\" #flexaction style=\"padding-bottom: 5px\">\r\n\t\t\t\t\t\t</flex-action>\r\n\t\t\t\t\t</div>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<!-- custom-SCADA: pages General / Label / Advanced / Visibility -->\r\n\t\t\t<mat-tab label=\"{{'gauges.shape-tab-general' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<gauge-general-tab [data]=\"data\" [property]=\"property\" (tagChange)=\"onGeneralTagChange($event)\"></gauge-general-tab>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.shape-tab-label' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<gauge-label-tab [property]=\"property\"></gauge-label-tab>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.shape-tab-advanced' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<gauge-advanced-tab [data]=\"data\" [property]=\"property\"></gauge-advanced-tab>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t\t<mat-tab label=\"{{'gauges.shape-tab-visibility' | translate}}\">\r\n\t\t\t\t<div class=\"mat-tab-container\">\r\n\t\t\t\t\t<gauge-visibility-tab [data]=\"data\" [property]=\"property\"></gauge-visibility-tab>\r\n\t\t\t\t</div>\r\n\t\t\t</mat-tab>\r\n\t\t</mat-tab-group>\r\n    </div>\r\n    <div mat-dialog-actions class=\"dialog-action\">\r\n        <button mat-raised-button (click)=\"onNoClick()\">{{'dlg.cancel' | translate}}</button>\r\n        <button mat-raised-button color=\"primary\" (click)=\"onOkClick()\" [mat-dialog-close]=\"data\" [disabled]=\"isButtonActionInvalid() || !isSelectOptionsConfigurationValid()\" cdkFocusInitial>{{'dlg.ok' | translate}}</button>\r\n    </div>\r\n</div>\r\n";
 
 /***/ }),
 
