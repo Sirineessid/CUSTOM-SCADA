@@ -1226,6 +1226,7 @@ export interface Placeholder {
 }
 
 export enum DeviceViewModeType {
+    connections = 'connections',
     tags = 'tags',
     devices = 'devices',
     list = 'devices-list',

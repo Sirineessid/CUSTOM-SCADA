@@ -34,12 +34,13 @@ export class DeviceComponent implements OnInit, OnDestroy {
     private sectionMessageHandled = false;
     private sectionMessageOpened = false;
 
+    connectionsViewMode = DeviceViewModeType.connections;
     devicesViewMode = DeviceViewModeType.devices;
     devicesViewMap = DeviceViewModeType.map;
     devicesViewList = DeviceViewModeType.list;
     tagsViewMode = DeviceViewModeType.tags;
 
-    showMode = <string>this.devicesViewMap;
+    showMode = <string>this.connectionsViewMode;
     readonly = false;
     reloadActive = false;
 
@@ -51,7 +52,7 @@ export class DeviceComponent implements OnInit, OnDestroy {
         if (this.router.url.indexOf(DEVICE_READONLY) >= 0) {
             this.readonly = true;
         }
-        this.showMode = localStorage.getItem('@frango.devicesview') || this.devicesViewMap;
+        this.showMode = <string>this.connectionsViewMode;
     }
 
     ngOnInit() {
@@ -123,8 +124,7 @@ export class DeviceComponent implements OnInit, OnDestroy {
             }
             return;
         }
-        let mode = localStorage.getItem('@frango.devicesview') || this.devicesViewMap;
-        this.show(mode);
+        this.show(this.connectionsViewMode);
     }
 
     gotoList(device: Device) {

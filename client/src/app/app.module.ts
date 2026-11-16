@@ -53,6 +53,7 @@ import { DeviceListComponent } from './device/device-list/device-list.component'
 import { S7ImportComponent } from './device/s7-import/s7-import.component';
 import { S7ExploreComponent } from './device/s7-import/s7-explore.component';
 import { DeviceMapComponent } from './device/device-map/device-map.component';
+import { ConnectionsListComponent } from './device/connections-list/connections-list.component';
 import { FuxaViewComponent } from './fuxa-view/fuxa-view.component';
 import { CardsViewComponent } from './cards-view/cards-view.component';
 import { TesterComponent } from './tester/tester.component';
@@ -310,6 +311,7 @@ export const myCustomTooltipDefaults: MatTooltipDefaultOptions = {
         S7ImportComponent,
         S7ExploreComponent,
         DeviceMapComponent,
+        ConnectionsListComponent,
         FuxaViewComponent,
         FuxaViewDialogComponent,
         ViewPropertyComponent,

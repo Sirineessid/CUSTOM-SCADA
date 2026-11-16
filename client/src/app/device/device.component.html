@@ -3,7 +3,22 @@
         <mat-icon>lan</mat-icon>
         {{'device.list-title' | translate}}
     </div>
+    <div class="view-tabs">
+        <button mat-button class="view-tab" [ngClass]="{'view-tab-active': showMode === connectionsViewMode}"
+                (click)="show(connectionsViewMode)">
+            <mat-icon>storage</mat-icon>
+            {{'device.list-device' | translate}}
+        </button>
+        <button mat-button class="view-tab" [ngClass]="{'view-tab-active': showMode.startsWith(devicesViewMode) || showMode === tagsViewMode}"
+                (click)="show(devicesViewMap)">
+            <mat-icon>device_hub</mat-icon>
+            {{'devices.mode-map' | translate}}
+        </button>
+    </div>
     <div class="work-panel">
+        <app-connections-list [class.hidden]="showMode !== connectionsViewMode"
+                              [readonly]="readonly"
+                              (selected)="gotoList($event)"></app-connections-list>
         <app-device-list [class.hidden]="!showMode.startsWith(tagsViewMode)" #devicelist (goto)="gotoDevices(false)" [readonly]="readonly"></app-device-list>
         <app-device-map [class.hidden]="!showMode.startsWith(devicesViewMode)" #devicemap [mode]="showMode" (goto)="gotoList($event)" [readonly]="readonly"></app-device-map>
     </div>
@@ -30,6 +45,6 @@
     <mat-icon *ngIf="showMode.startsWith(devicesViewList)" matTooltip="{{'devices.mode-map' | translate}}">device_hub</mat-icon>
     <mat-icon *ngIf="showMode.startsWith(devicesViewMap)" matTooltip="{{'devices.mode-list' | translate}}">view_list</mat-icon>
 </button>
-<button *ngIf="!readonly" mat-fab color="primary" (click)="addItem()" class="fab-add">
+<button *ngIf="!readonly && showMode !== connectionsViewMode" mat-fab color="primary" (click)="addItem()" class="fab-add">
     <mat-icon class="">add</mat-icon>
 </button>
