@@ -16,6 +16,7 @@ const MANIFEST = 'pages.json';
 const CONFIGURATION_VIEW = 'v_site_configuration';
 const CURVES_VIEW = 'v_site_courbes';
 const HISTORY_VIEW = 'v_site_historique';
+const ALARMS_VIEW = 'v_site_alarmes';
 /** wait the end of the saves of the editor (one save per view, layout...) before writing */
 const WRITE_DELAY = 1500;
 
@@ -35,6 +36,9 @@ function init(_runtime, settings, _logger, _siteName) {
     siteName = _siteName;
     siteDir = path.dirname(settings.workDir);
     siteSettings = settings;
+    require('./versions').init(runtime, settings, logger);
+    // diagnostic: state of the connections, errors of communication (diagnostic.js)
+    require('./diagnostic').init(runtime, settings, logger);
     // the project is saved by setProject (import, new site) or setProjectData (editor)
     ['setProject', 'setProjectData'].forEach(fnc => {
         const original = runtime.project[fnc];
@@ -60,6 +64,21 @@ async function upgradeConfigurationPage(project) {
         await runtime.update('set-view', upgraded);
         logger.info('site files: page Configuration updated (configuration.html shown in the page)');
     }
+    // page Alarmes (alarmes.html) for the sites made before it
+    const added = require('./template').addAlarmsPage(project, siteName);
+    if (added) {
+        await runtime.project.setProjectData('set-view', added.view);
+        await runtime.update('set-view', added.view);
+        await runtime.project.setProjectData('layout', added.layout);
+        await runtime.update('layout', added.layout);
+        logger.info('site files: page Alarmes added (alarmes.html shown in the page, menu)');
+    }
+}
+
+/** page of FUXA showing a file of the folder of the site in a frame (Configuration, Alarmes) */
+function showsFile(view, file) {
+    return Object.values(view.items || {}).some(item => item.type === 'svg-ext-own_ctrl-iframe' &&
+        String((item.property && item.property.address) || '').endsWith(file));
 }
 
 /** the page Configuration that shows configuration.html is not copied in configuration.html */
@@ -97,16 +116,29 @@ async function writeFiles() {
     const menu = ((project.hmi.layout && project.hmi.layout.navigation && project.hmi.layout.navigation.items) || []).map(item => item.view);
     const rankInMenu = f => { const i = menu.indexOf(f.viewId); return i < 0 ? menu.length : i; };
     navFiles = files.slice().sort((a, b) => rankInMenu(a) - rankInMenu(b));
+    const written = {};
     pageViews.forEach((view, i) => {
-        fs.writeFileSync(path.join(siteDir, pageFiles[i].file), pageHtml(view, project, pageFiles[i].file));
+        written[pageFiles[i].file] = pageHtml(view, project, pageFiles[i].file);
+        fs.writeFileSync(path.join(siteDir, pageFiles[i].file), written[pageFiles[i].file]);
     });
-    fs.writeFileSync(path.join(siteDir, 'configuration.html'), configurationHtml(project, configurationView, pageFiles));
+    written['configuration.html'] = configurationHtml(project, configurationView, pageFiles);
+    fs.writeFileSync(path.join(siteDir, 'configuration.html'), written['configuration.html']);
     // access to the data of the site (API) for the pages of the folder
     fs.copyFileSync(path.join(__dirname, 'site-api.client.js'), path.join(siteDir, 'site-api.js'));
     // scripts of the page Courbes and of the configuration of its graphs
     fs.copyFileSync(path.join(__dirname, 'courbes.client.js'), path.join(siteDir, 'courbes.js'));
     fs.copyFileSync(path.join(__dirname, 'graphs-editor.client.js'), path.join(siteDir, 'configuration-graphes.js'));
     fs.writeFileSync(path.join(siteDir, 'api.html'), apiHtml());
+    // versions and backups of the site
+    fs.copyFileSync(path.join(__dirname, 'versions.client.js'), path.join(siteDir, 'versions.js'));
+    fs.copyFileSync(path.join(__dirname, 'alarms.client.js'), path.join(siteDir, 'alarmes.js'));
+    files.push({ file: 'alarmes.js', page: 'Alarmes (script)', viewId: null });
+    fs.writeFileSync(path.join(siteDir, 'versions.html'), versionsHtml());
+    // diagnostic of the communication of the site
+    fs.copyFileSync(path.join(__dirname, 'diagnostic.client.js'), path.join(siteDir, 'diagnostic.js'));
+    fs.writeFileSync(path.join(siteDir, 'diagnostic.html'), diagnosticHtml());
+    files.push({ file: 'diagnostic.html', page: 'Diagnostic', viewId: null }, { file: 'diagnostic.js', page: 'Diagnostic (script)', viewId: null });
+    files.push({ file: 'versions.html', page: 'Versions', viewId: null }, { file: 'versions.js', page: 'Versions (script)', viewId: null });
     files.push({ file: 'api.html', page: 'API', viewId: null }, { file: 'site-api.js', page: 'API (script)', viewId: null },
         { file: 'courbes.js', page: 'Courbes (script)', viewId: null }, { file: 'configuration-graphes.js', page: 'Configuration des graphiques (script)', viewId: null });
 
@@ -120,6 +152,8 @@ async function writeFiles() {
     });
     fs.writeFileSync(path.join(siteDir, MANIFEST), JSON.stringify({ site: siteName, updated: new Date().toISOString(), files }, null, 2));
     logger.info(`site files: ${files.length} HTML files written in ${siteDir}`);
+    // version of the site (project, configurations, HTML files of the pages)
+    await require('./versions').snapshot({ files: written }).catch(err => logger.error(`site versions: ${err}`));
 }
 
 /** position of configuration.html: after accueil and courbes, like in the menu */
@@ -154,7 +188,9 @@ function pageHtml(view, project, file) {
     const tags = tagNames(project);
     const items = Object.values(view.items || {});
     const liveUrl = `/site/${encodeURIComponent(siteName)}/home/${encodeURIComponent(view.name)}`;
-    const live = view.id === CURVES_VIEW ? curvesLive() : view.id === HISTORY_VIEW ? historyLive() : '';
+    const live = view.id === CURVES_VIEW ? curvesLive() : view.id === HISTORY_VIEW ? historyLive() : view.id === ALARMS_VIEW ? alarmsLive() : '';
+    // the page that shows this file in a frame: only the live part
+    const own = showsFile(view, file);
     return document(`${view.name} - ${siteName}`, `${navBar(file)}
 <header>
   <h1>${esc(view.name)} <small>${esc(siteName)}</small></h1>
@@ -162,14 +198,14 @@ function pageHtml(view, project, file) {
      Version en direct : <a href="${liveUrl}">${esc(liveUrl)}</a></p>
 </header>
 ${live}
-${live ? '<h2>Synoptique de la page (copie de l\'éditeur)</h2>' : ''}
+${own ? '' : `${live ? '<h2>Synoptique de la page (copie de l\'éditeur)</h2>' : ''}
 <section class="synoptic" style="background:${esc(profile.bkcolor || '#ffffff')};width:${Number(profile.width) || 1280}px;height:${Number(profile.height) || 720}px">
 ${view.svgcontent || ''}
 </section>
 <section>
   <h2>Objets de la page (${items.length})</h2>
   ${itemsTable(items, tags)}
-</section>
+</section>`}
 ${jsonBlock('fuxa-view', view)}`);
 }
 
@@ -312,6 +348,15 @@ function curvesLive() {
 <script src="courbes.js"></script>`;
 }
 
+/** alarmes.html: alarms of the site (active, history, thresholds), made by alarmes.js with the API of the site */
+function alarmsLive() {
+    return `<section>
+  <div id="alarms-app" data-site="${esc(siteName)}"></div>
+</section>
+<script src="site-api.js"></script>
+<script src="alarmes.js"></script>`;
+}
+
 /** historiques.html: table of the history of the tags of the page Courbes, from the API */
 function historyLive() {
     return `<section>
@@ -351,54 +396,203 @@ function historyLive() {
 </script>`;
 }
 
-/** api.html: services of the API of the site, with a test of each service */
+/**
+ * api.html: documentation of the API v1 of the server (the API is in the server: api-v1-hub.js, api-v1-site.js),
+ * with a form to test the services; the page does not give the data itself
+ */
 function apiHtml() {
-    const base = `/site/${siteName}/api/site`;
+    const base = `/api/v1/sites/${siteName}`;
+    const row = (method, path, params, answer) => [method, path, params, answer];
     return document(`API - ${siteName}`, `${navBar('api.html')}
 <header>
-  <h1>API du site <small>${esc(siteName)}</small></h1>
-  <p class="info">Services d'accès aux données de ce site (tags, valeurs, historique). Chaque site a sa propre API : elle ne donne que les données du site.
-     Les pages du dossier utilisent le script <a href="site-api.js">site-api.js</a>.</p>
+  <h1>API v1 <small>${esc(siteName)}</small></h1>
+  <p class="info">L'API est développée côté serveur (FUXA). Cette page n'est qu'une documentation avec un formulaire de test :
+     les pages HTML du site (Courbes, Historiques, Configuration) utilisent ces services avec le script <a href="site-api.js">site-api.js</a>.
+     Les données sont séparées par site : chaque adresse contient l'identifiant du site (site_id = <b>${esc(siteName)}</b>).</p>
 </header>
 <section>
-  <h2>Services</h2>
-  ${table(['Service', 'Adresse', 'Paramètres', 'Réponse'], [
-        ['Informations', `GET ${base}/info`, '', 'site, tags (nom, connexion, adresse, type, enregistré), curves (tags de la page Courbes), source de l\'historique'],
-        ['Valeurs actuelles', `GET ${base}/values`, 'tags=nom1,nom2 (tous les tags si absent)', 'values : nom, valeur, timestamp'],
-        ['Historique', `GET ${base}/history`, 'tags=nom1,nom2 (tags des courbes si absent)\nfrom, to : ms ou date ISO (8 dernières heures si absent)\nmaxPoints : 2000 par défaut\ninterval : une valeur (moyenne) toutes les n secondes', 'series : nom, count, values [{ t : ms, v : valeur }]'],
-        ['Graphiques', `GET ${base}/graphs`, '', 'graphs : titre, mode (temps / xy), tag X, tags, unités, couleurs, limites, période, échantillonnage']
+  <h2>Format des réponses</h2>
+  ${table(['Cas', 'Code HTTP', 'Corps de la réponse'], [
+        ['Succès', '200 (201 pour une création)', '{ "data": ..., "meta": { "site_id": ..., ... } }'],
+        ['Requête invalide (paramètre, date, JSON)', '400', '{ "error": { "code": "invalid_request", "message": "...", "details": { "param": ... } } }'],
+        ['Accès refusé (sécurité FUXA activée, jeton absent ou expiré)', '401 / 403', 'jeton à envoyer dans l\'en-tête x-access-token'],
+        ['Site, tag, graphique, alarme ou service inconnu', '404', 'codes site_not_found, tag_not_found, graph_not_found, alarm_not_found, unknown_service'],
+        ['Conflit (site déjà existant)', '409', 'code site_exists'],
+        ['Site arrêté ou en démarrage', '503', 'codes site_stopped, site_starting'],
+        ['Erreur du serveur', '500 / 502', 'code server_error, site_unavailable']
     ])}
+</section>
+<section>
+  <h2>Sites</h2>
+  ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
+        row('GET', '/api/v1', '', 'liste des services'),
+        row('GET', '/api/v1/sites', '', 'sites : site_id, state (running, stopped, starting), url, pages, fichiers'),
+        row('POST', '/api/v1/sites', '{ "site_id": "Nouveau_site" }', 'site créé (201)'),
+        row('GET', `/api/v1/sites/{site_id}`, '', 'un site avec ses pages'),
+        row('PUT', `/api/v1/sites/{site_id}`, '{ "site_id": "Nouveau_nom" }', 'site renommé'),
+        row('DELETE', `/api/v1/sites/{site_id}`, '', 'site supprimé (déplacé dans sites/_supprimes)'),
+        row('POST', `/api/v1/sites/{site_id}/start | stop`, '', 'site démarré / arrêté'),
+        row('GET', `/api/v1/sites/{site_id}/export`, '', 'dossier du site (.zip)')
+    ])}
+</section>
+<section>
+  <h2>Configuration</h2>
+  ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
+        row('GET', `${base}/config`, '', 'connexions, pages, menu, graphiques, source de l\'historique'),
+        row('GET', `${base}/config/graphs`, '', 'graphiques de la page Courbes'),
+        row('PUT', `${base}/config/graphs`, '{ "graphs": [ { "title", "mode", "xTag", "series": [ { "tag", "unit", "color", "min", "max" } ], ... } ] }', 'graphiques enregistrés'),
+        row('GET', `${base}/config/graph-sets`, '', 'configurations de courbes : id, name, nombre de graphiques, active (par défaut)'),
+        row('POST', `${base}/config/graph-sets`, '{ "name": "...", "copyFrom": "id (facultatif)" }', 'configuration créée (201)'),
+        row('PUT / DELETE', `${base}/config/graph-sets/{set_id}`, '{ "name": "..." } (PUT)', 'configuration renommée / supprimée'),
+        row('POST', `${base}/config/graph-sets/{set_id}/activate`, '', 'configuration affichée par défaut dans la page Courbes'),
+        row('GET / PUT', `${base}/config/graph-sets/{set_id}/graphs`, '{ "graphs": [...] } (PUT)', 'graphiques de la configuration'),
+        row('GET', `${base}/config/history`, '', 'source de l\'historique (sans mot de passe)'),
+        row('PUT', `${base}/config/history`, '{ "source": "fuxa" | "postgres", ... }', 'source enregistrée'),
+        row('POST', `${base}/config/history/test`, 'paramètres PostgreSQL', 'tables et colonnes')
+    ])}
+</section>
+<section>
+  <h2>Équipements, tags et valeurs</h2>
+  ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
+        row('GET', `${base}/devices`, '', 'connexions avec leur état (connect-ok, connect-error...)'),
+        row('GET', `${base}/tags`, 'search : texte (nom, équipement, adresse, description, catégorie)\ndevice : nom ou id de la connexion\nrecorded : true / false', 'tags : id, name, device, category, address, type, recorded'),
+        row('GET', `${base}/tags/{tag}`, 'tag : nom ou id', 'tag avec value et timestamp'),
+        row('GET', `${base}/values`, 'tags=nom1,nom2 (tous les tags si absent)', 'valeurs instantanées')
+    ])}
+</section>
+<section>
+  <h2>Historiques et courbes</h2>
+  ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
+        row('GET', `${base}/history`, 'tags=nom1,nom2 (tags des graphiques si absent)\nfrom, to : ms ou date ISO (8 dernières heures si absent, 1 an au plus)\ninterval : une valeur moyenne toutes les n secondes\nmaxPoints : 10 à 200000 (2000 par défaut)', 'séries : tag, count, values [{ t : ms, v : valeur }]'),
+        row('GET', `${base}/curves`, 'set : configuration (par défaut si absent)', 'graphiques'),
+        row('GET', `${base}/curves/{graph_id}/data`, 'from, to (période du graphique si absent), interval', 'mode temps : values [{ t, v }] ; mode XY : points [{ x, y, t }]')
+    ])}
+</section>
+<section>
+  <h2>Alarmes</h2>
+  ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
+        row('GET', `${base}/alarms`, 'type : highhigh, high, low, info (plusieurs : a,b)\ndevice : équipement\ntag : nom du tag\ntext : texte du message', 'alarmes actives (critiques d’abord) : alarm_id, tag, device, type, priority, critical, text, value, statusText, ontime, acktime, toack ; meta.counts : nombre par priorité'),
+        row('GET', `${base}/alarms/history`, 'from, to (24 dernières heures si absent)\ntype, device, tag, text : comme ci-dessus', 'historique : début, fin, acquittement, valeur, état'),
+        row('POST', `${base}/alarms/{alarm_id}/ack`, '', 'alarme acquittée'),
+        row('GET', `${base}/alarms/config`, '', 'seuils d’alarme des tags : name, tag, device, levels (highhigh, high, low, info)'),
+        row('PUT', `${base}/alarms/config/{name}`, '{ "tag": "nom", "levels": { "highhigh": { "enabled": true, "condition": "above | below | between", "value": 3.9, "min", "max", "text", "group", "delay": 5, "ackmode": "ackactive | ackpassive | float" } } }', 'alarme créée (201) ou modifiée'),
+        row('DELETE', `${base}/alarms/config/{name}`, '', 'alarme supprimée'),
+        row('POST', `${base}/alarms/ack`, '', 'toutes les alarmes acquittées')
+    ])}
+</section>
+<section>
+  <h2>Diagnostic</h2>
+  ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
+        row('GET', '/api/v1/diagnostic', '', 'communication de tous les sites : état (ok, warning, error, stopped), équipements connectés, dernière donnée, tags sans mise à jour, erreurs'),
+        row('GET', `${base}/diagnostic`, '', 'résumé, équipements (état, depuis, dernière donnée, erreurs), tags sans mise à jour, derniers événements'),
+        row('GET', `${base}/diagnostic/tags`, 'stale=true : tags sans mise à jour seulement\ndevice : équipement', 'tags : dernière valeur, dernière mise à jour, âge, limite, stale'),
+        row('GET', `${base}/diagnostic/events`, 'from, to (7 derniers jours si absent)\nlevel : error, warning, info\ndevice : équipement', 'journal : changements d’état des connexions, erreurs et avertissements de communication')
+    ])}
+</section>
+<section>
+  <h2>Versions et sauvegardes</h2>
+  ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
+        row('GET', `${base}/versions`, '', 'versions : version_id, date, type (automatique, manuelle, avant restauration, restauration), résumé des modifications'),
+        row('POST', `${base}/versions`, '{ "comment": "description" }', 'version manuelle créée (201)'),
+        row('GET', `${base}/versions/{version_id}`, '', 'pages, fichiers et modifications par rapport à la version précédente'),
+        row('GET', `${base}/versions/{version_id}/changes`, 'with : previous (défaut), current ou version_id', 'modifications : catégorie, élément, action, détails'),
+        row('GET', `${base}/versions/{version_id}/diff`, 'file : fichier HTML\nwith : previous, current ou version_id', 'lignes ajoutées (+), supprimées (-), identiques'),
+        row('POST', `${base}/versions/{version_id}/restore`, '', 'version restaurée (l\'état actuel est conservé avant)'),
+        row('GET', `${base}/backups`, '', 'sauvegardes complètes du dossier du site'),
+        row('POST', `${base}/backups`, '{ "comment": "description" }', 'sauvegarde créée (201)'),
+        row('GET', `${base}/backups/{backup_id}`, '', 'fichier .zip de la sauvegarde'),
+        row('POST', `${base}/backups/{backup_id}/restore`, '', 'dossier du site remplacé par la sauvegarde (le dossier actuel est sauvegardé avant)'),
+        row('DELETE', `${base}/backups/{backup_id}`, '', 'sauvegarde supprimée')
+    ])}
+</section>
+<section>
+  <h2>Tester</h2>
+  <div class="period">
+    <select id="method"><option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option></select>
+    <input id="path" value="${esc(base)}/tags?search=niveau" size="70">
+    <button id="run" class="primary">Envoyer</button>
+  </div>
+  <div class="period"><textarea id="body" rows="3" cols="90" placeholder='Corps JSON (POST, PUT), ex. { "site_id": "Nouveau_site" }'></textarea></div>
+  <p class="info">Exemples :
+    <a href="#" data-path="${esc(base)}/config">config</a>,
+    <a href="#" data-path="${esc(base)}/devices">devices</a>,
+    <a href="#" data-path="${esc(base)}/values">values</a>,
+    <a href="#" data-path="${esc(base)}/curves">curves</a>,
+    <a href="#" data-path="${esc(base)}/alarms">alarms</a>,
+    <a href="#" data-path="/api/v1/sites">sites</a>,
+    <a href="#" data-path="${esc(base)}/history?tags=inconnu">erreur 404</a></p>
+  <pre id="result">Résultat...</pre>
 </section>
 <section>
   <h2>Utilisation dans une page HTML du dossier</h2>
   <pre>&lt;script src="site-api.js"&gt;&lt;/script&gt;
 &lt;script&gt;
-  SiteApi.info().then(function (info) { console.log(info.tags, info.curves); });
-  SiteApi.values(['reservoir_niveau']).then(function (r) { console.log(r.values); });
-  SiteApi.history({ tags: ['reservoir_niveau'], from: new Date(Date.now() - 3600000), to: new Date() })
+  SiteApi.request('GET', '/tags', undefined, { search: 'niveau' }).then(function (r) { console.log(r.data); });
+  SiteApi.values(['niveau_reservoir_s7']).then(function (r) { console.log(r.values); });
+  SiteApi.history({ tags: ['niveau_reservoir_s7'], from: new Date(Date.now() - 3600000), to: new Date(), interval: 60 })
     .then(function (r) { console.log(r.series); });
 &lt;/script&gt;</pre>
 </section>
-<section>
-  <h2>Tester</h2>
-  <div class="period">
-    <select id="service"><option value="/info">info</option><option value="/values">values</option><option value="/history">history</option></select>
-    <input id="params" placeholder="tags=reservoir_niveau&amp;from=..." size="60">
-    <button id="run" class="primary">Envoyer</button>
-  </div>
-  <pre id="result">Résultat...</pre>
-</section>
 <script src="site-api.js"></script>
 <script>
+  document.querySelectorAll('[data-path]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      document.getElementById('method').value = 'GET';
+      document.getElementById('path').value = a.getAttribute('data-path');
+      document.getElementById('run').click();
+    });
+  });
   document.getElementById('run').addEventListener('click', function () {
-    var url = SiteApi.base + document.getElementById('service').value;
-    var params = document.getElementById('params').value.trim();
-    document.getElementById('result').textContent = 'GET ' + url + (params ? '?' + params : '') + ' ...';
-    fetch(url + (params ? '?' + params : '')).then(function (r) { return r.json(); }).then(function (body) {
-      document.getElementById('result').textContent = JSON.stringify(body, null, 2);
-    }).catch(function (err) { document.getElementById('result').textContent = err.message; });
+    var method = document.getElementById('method').value, url = document.getElementById('path').value.trim();
+    var text = document.getElementById('body').value.trim();
+    var result = document.getElementById('result');
+    var options = { method: method, headers: {} };
+    if (text && method !== 'GET' && method !== 'DELETE') {
+      options.headers['Content-Type'] = 'application/json';
+      options.body = text;
+    }
+    try {
+      var token = (JSON.parse(sessionStorage.getItem('currentUser')) || {}).token;
+      if (token) { options.headers['x-access-token'] = token; }
+    } catch (err) { /* no user */ }
+    result.textContent = method + ' ' + url + ' ...';
+    fetch(url, options).then(function (r) {
+      return r.text().then(function (t) {
+        var shown = t;
+        try { shown = JSON.stringify(JSON.parse(t), null, 2); } catch (err) { /* not JSON */ }
+        result.textContent = 'HTTP ' + r.status + '\\n' + shown;
+      });
+    }).catch(function (err) { result.textContent = err.message; });
   });
 </script>`);
+}
+
+/** versions.html: versions of the site and full backups of its folder (versions.js, API v1) */
+/** diagnostic.html: communication of the sites, equipments, tags without update, errors (diagnostic.js, API v1) */
+function diagnosticHtml() {
+    return document(`Diagnostic - ${siteName}`, `${navBar('diagnostic.html')}
+<header>
+  <h1>Diagnostic <small>${esc(siteName)}</small></h1>
+  <p class="info">Suivi technique : état de la communication de chaque site et de chaque équipement (automates, serveurs OPC UA...),
+     dernière donnée reçue, tags sans mise à jour et journal des erreurs de communication. Actualisé toutes les 10 secondes.</p>
+</header>
+<div id="diagnostic-app" data-site="${esc(siteName)}"></div>
+<script src="site-api.js"></script>
+<script src="diagnostic.js"></script>`);
+}
+
+function versionsHtml() {
+    return document(`Versions - ${siteName}`, `${navBar('versions.html')}
+<header>
+  <h1>Versions et sauvegardes <small>${esc(siteName)}</small></h1>
+  <p class="info">Une version du site est conservée à chaque enregistrement de l'éditeur : pages, connexions, tags, alarmes, graphiques,
+     configurations et fichiers HTML. Les enregistrements faits à moins de 5 minutes d'intervalle sont regroupés.
+     Une sauvegarde complète contient tout le dossier du site (avec l'historique des valeurs) ; une sauvegarde automatique est faite chaque jour.</p>
+</header>
+<div id="versions-app" data-site="${esc(siteName)}"></div>
+<script src="site-api.js"></script>
+<script src="versions.js"></script>`);
 }
 
 /** graphs of the page Courbes (graphs.js): summary and editor (configuration-graphes.js) */
@@ -417,7 +611,11 @@ function curvesSection(project) {
     const lines = ((chart && chart.lines) || []).map(line => ({ id: line.id, name: line.name, label: line.label, color: line.color }));
     let list = [];
     try {
-        list = require('./graphs').get(siteSettings, allTags, lines);
+        // graphs of all the configurations of graphs
+        const graphs = require('./graphs');
+        graphs.listSets(siteSettings, allTags, lines).forEach(set => {
+            graphs.get(siteSettings, allTags, lines, set.id).forEach(g => list.push(Object.assign({ setName: set.name + (set.active ? ' (par défaut)' : '') }, g)));
+        });
     } catch (err) {
         logger.error(`site files: graphs ${err}`);
     }
@@ -428,7 +626,8 @@ function curvesSection(project) {
     const limits = (min, max) => min === null && max === null ? 'auto' : `${min === null ? 'auto' : min} à ${max === null ? 'auto' : max}`;
     return `<section id="graphes">
   <h2>Graphiques de la page Courbes</h2>
-  ${table(['Graphique', 'Mode', 'Tags (libellé, unité, limites Y)', 'Période', 'Échantillonnage', 'Options'], list.map(g => [
+  ${table(['Configuration', 'Graphique', 'Mode', 'Tags (libellé, unité, limites Y)', 'Période', 'Échantillonnage', 'Options'], list.map(g => [
+        g.setName,
         g.title,
         g.mode === 'xy' ? `XY : en fonction de ${tagText(g.xTag)}${g.xUnit ? ` (${g.xUnit})` : ''}, X : ${limits(g.xMin, g.xMax)}` : 'temps',
         g.series.map(x => `${tagText(x.tag)} : ${x.label || ''}${x.unit ? ` (${x.unit})` : ''}, ${limits(x.min, x.max)}`).join('\n'),
@@ -530,20 +729,49 @@ function jsonBlock(id, value) {
 }
 
 /**
- * navigation bar of the files: back, supervision of the site, the other files, API, editor
- * (hidden when the file is shown in a page of FUXA, frame of the page Configuration)
+ * navigation bar of the files of the site: back, mode exploitation (supervision) / mode édition (editor), pages of the
+ * folder (in the order of the menu, written again at each save: new pages are added), and a list to go to another site
+ * (on the last page seen in that site, kept in the browser for each site)
  */
 function navBar(current) {
     const base = `/site/${encodeURIComponent(siteName)}`;
-    const link = (href, text, active) => `<a href="${href}"${active ? ' class="active"' : ''}>${esc(text)}</a>`;
+    const link = (href, text, active, title) => `<a href="${href}"${active ? ' class="active"' : ''}${title ? ` title="${esc(title)}"` : ''}>${esc(text)}</a>`;
     const pages = navFiles.map(f => link(f.file, f.page, f.file === current)).join('');
-    return `<nav class="sitenav" id="sitenav">
+    return `<nav class="sitenav" id="sitenav" data-site="${esc(siteName)}" data-file="${esc(current)}">
   <a href="${base}/home" class="back" onclick="if (history.length > 1 && document.referrer) { history.back(); return false; }">&#8592; Retour</a>
-  ${link(`${base}/home`, 'Supervision')}
-  <span class="sep"></span>${pages}${link('api.html', 'API', current === 'api.html')}
-  <span class="sep"></span>${link(`${base}/editor`, 'Éditeur')}
+  ${link(`${base}/home`, '▶ Exploitation', false, 'Mode exploitation : supervision du site (dernière page consultée)')}
+  <span class="sep"></span>${pages}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
+  <span class="sep"></span>${link(`${base}/editor`, '✎ Édition', false, 'Mode édition : éditeur FUXA du site')}
+  <span style="flex:1"></span>
+  <label class="site-switch" title="Passer à un autre site (sur sa dernière page consultée)">Site <select id="site-switch"><option>${esc(siteName)}</option></select></label>
 </nav>
-<script>if (window.self !== window.top) { document.getElementById('sitenav').style.display = 'none'; }</script>`;
+<script>
+  (function () {
+    var nav = document.getElementById('sitenav');
+    if (window.self !== window.top) { nav.style.display = 'none'; return; }
+    var site = nav.getAttribute('data-site'), file = nav.getAttribute('data-file');
+    var key = function (name) { return 'site-last-file:' + name; };
+    try { localStorage.setItem(key(site), file); } catch (err) { /* private mode */ }
+    var select = document.getElementById('site-switch');
+    fetch('/api/v1/sites').then(function (r) { return r.json(); }).then(function (r) {
+      var sites = r.data || [];
+      select.innerHTML = sites.map(function (s) {
+        var name = String(s.site_id).replace(/[&<>"]/g, '');
+        return '<option value="' + name + '"' + (s.site_id === site ? ' selected' : '') + (s.state === 'running' ? '' : ' disabled') + '>' + name + (s.state === 'running' ? '' : ' (arrêté)') + '</option>';
+      }).join('');
+      select.addEventListener('change', function () {
+        var target = sites.filter(function (s) { return s.site_id === select.value; })[0];
+        if (!target) { return; }
+        var files = (target.files || []).map(function (f) { return f.file; });
+        var last = null;
+        try { last = localStorage.getItem(key(target.site_id)); } catch (err) { /* private mode */ }
+        // the last page seen in the site, else the same page, else its home page
+        var page = last && files.indexOf(last) >= 0 ? last : files.indexOf(file) >= 0 ? file : files.indexOf('accueil.html') >= 0 ? 'accueil.html' : files[0];
+        location.href = '/site/' + encodeURIComponent(target.site_id) + '/fichiers/' + (page || '');
+      });
+    }).catch(function () { select.disabled = true; });
+  })();
+</script>`;
 }
 
 function document(title, body) {
@@ -580,11 +808,35 @@ function document(title, body) {
   .legend small { color: #78909c; }
   .pan-bar { position: relative; height: 16px; margin: 6px 0 2px; background: #e3e8ef; border-radius: 8px; cursor: pointer; user-select: none; touch-action: none; }
   .pan-thumb { position: absolute; top: 0; bottom: 0; min-width: 24px; background: #90a4ae; border-radius: 8px; cursor: grab; }
+  pre.diff { max-height: 520px; padding: 0; } pre.diff span { display: block; padding: 0 8px; white-space: pre-wrap; word-break: break-all; }
+  pre.diff i { display: inline-block; min-width: 70px; color: #90a4ae; font-style: normal; }
+  .d-add { background: #e8f5e9; color: #1b5e20; } .d-del { background: #ffebee; color: #b71c1c; } .d-skip { color: #90a4ae; font-style: italic; background: #f5f5f5; }
+  .lvl { display: inline-block; padding: 1px 8px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: bold; }
+  .lvl-highhigh { background: #c62828; color: #fff; } .lvl-high { background: #ef6c00; color: #fff; } .lvl-low { background: #f9a825; color: #222; } .lvl-info { background: #1565c0; color: #fff; }
+  tr.row-critical td { background: #ffebee; } tr.row-critical td:first-child { border-left: 4px solid #c62828; }
+  .alarm-counts { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; } .alarm-counts .cnt { padding: 6px 12px; border-radius: 6px; font-weight: bold; }
+  .alarm-counts .toack { background: #eceff1; color: #37474f; }
+  .blink { animation: blink 1s step-start infinite; } @keyframes blink { 50% { opacity: 0.45; } }
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid #1f3864; margin: 12px 0 6px; }
+  .tabs button { border: 1px solid #cfd8dc; border-bottom: none; background: #eceff1; border-radius: 6px 6px 0 0; padding: 7px 16px; }
+  .tabs button.on { background: #1f3864; color: #fff; border-color: #1f3864; }
+  .st { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
+  .st-ok { background: #e8f5e9; color: #1b5e20; } .st-warning { background: #fff3e0; color: #e65100; } .st-error { background: #ffebee; color: #b71c1c; }
+  .st-off { background: #eceff1; color: #546e7a; } .st-info { background: #e3f2fd; color: #0d47a1; }
+  .diag-cards { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+  .diag-cards .card { background: #fff; border: 1px solid #cfd8dc; border-radius: 6px; padding: 10px 14px; min-width: 170px; font-size: 13px; color: #546e7a; }
+  .diag-cards .card b { display: block; font-size: 22px; color: #1f3864; margin-top: 4px; } .diag-cards .card small { display: block; }
+  .bad { color: #c62828 !important; font-weight: bold; }
+  .sets-bar { background: #e8eef7; border-radius: 6px; padding: 6px 10px; }
+  .picker-back { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 50; display: flex; align-items: center; justify-content: center; }
+  .picker { background: #fff; border-radius: 8px; padding: 12px 16px; width: min(1000px, 94vw); max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 6px 24px rgba(0,0,0,0.3); }
+  .picker-list { overflow: auto; flex: 1; min-height: 120px; border: 1px solid #ddd; }
   .pan-labels { display: flex; justify-content: space-between; font-size: 12px; color: #607d8b; }
   .sitenav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: -20px -20px 18px -20px; padding: 8px 20px; background: #1f3864; position: sticky; top: 0; z-index: 10; }
   .sitenav a { color: #fff; text-decoration: none; padding: 5px 10px; border-radius: 3px; font-size: 14px; }
   .sitenav a:hover { background: rgba(255,255,255,0.15); } .sitenav a.active { background: #1e88e5; }
   .sitenav a.back { font-weight: bold; border: 1px solid rgba(255,255,255,0.5); margin-right: 6px; }
+  .sitenav .site-switch { color: #fff; font-size: 13px; } .sitenav select { margin-left: 4px; padding: 3px; }
   .sitenav .sep { width: 1px; height: 20px; background: rgba(255,255,255,0.35); margin: 0 6px; }
 </style>
 </head>
