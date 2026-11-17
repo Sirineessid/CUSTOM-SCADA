@@ -1231,6 +1231,7 @@ export enum DeviceViewModeType {
     devices = 'devices',
     list = 'devices-list',
     map = 'devices-map',
+    opcua2pg = 'opcua2pg',
 }
 
 export enum DeviceConnectionStatusType {

@@ -13,6 +13,7 @@ var prjApi = require('./projects');
 var authApi = require('./auth');
 var usersApi = require('./users');
 var apiKeysApi = require('./apikeys');
+var opcua2pgApi = require('./opcua2pg');
 var alarmsApi = require('./alarms');
 var pluginsApi = require('./plugins');
 var diagnoseApi = require('./diagnose');
@@ -96,6 +97,8 @@ function init(_server, _runtime) {
             apiApp.use(reportsApi.app());
             apiKeysApi.init(runtime, authMiddleware, verifyGroups);
             apiApp.use(apiKeysApi.app());
+            opcua2pgApi.init(runtime, authMiddleware);
+            apiApp.use(opcua2pgApi.app());
 
             apiApp.use((err, req, res, next) => {
                 if (err?.type === 'entity.too.large') {

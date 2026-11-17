@@ -35,6 +35,7 @@ export class DeviceComponent implements OnInit, OnDestroy {
     private sectionMessageOpened = false;
 
     connectionsViewMode = DeviceViewModeType.connections;
+    opcua2pgViewMode = DeviceViewModeType.opcua2pg;
     devicesViewMode = DeviceViewModeType.devices;
     devicesViewMap = DeviceViewModeType.map;
     devicesViewList = DeviceViewModeType.list;
