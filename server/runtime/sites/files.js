@@ -779,12 +779,30 @@ function navBar(current) {
   <span class="sep"></span>${link(`${base}/editor`, '✎ Édition', false, 'Mode édition : éditeur FUXA du site')}
   <span style="flex:1"></span>
   <label class="site-switch" title="Passer à un autre site (sur sa dernière page consultée)">Site <select id="site-switch"><option>${esc(siteName)}</option></select></label>
+  <span id="nav-user" class="site-switch"></span>
 </nav>
 <script>
   (function () {
     var nav = document.getElementById('sitenav');
     if (window.self !== window.top) { nav.style.display = 'none'; return; }
     var site = nav.getAttribute('data-site'), file = nav.getAttribute('data-file');
+    // user connected (central accounts): name, role on this site, accounts (administrators), logout
+    fetch('/api/v1/auth/status', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (r) {
+      var box = document.getElementById('nav-user'), u = r.data && r.data.user;
+      if (!u) {
+        box.innerHTML = r.data && !r.data.setup ? '<a href="/connexion?next=' + encodeURIComponent(location.pathname) + '">Connexion</a>' : '';
+        return;
+      }
+      fetch('/api/v1/auth/me', { credentials: 'same-origin' }).then(function (m) { return m.json(); }).then(function (m) {
+        var role = ((m.data && m.data.siteRoles) || []).filter(function (x) { return x.site === site; })[0];
+        var name = String(u.name || u.username).replace(/[&<>"]/g, '');
+        box.innerHTML = '&#128100; ' + name + (role ? ' (' + role.role + ')' : '') + (u.admin ? ' <a href="/comptes">Comptes</a>' : '') + ' <a href="#" id="nav-logout">Déconnexion</a>';
+        document.getElementById('nav-logout').addEventListener('click', function (e) {
+          e.preventDefault();
+          fetch('/api/v1/auth/logout', { method: 'POST', credentials: 'same-origin' }).then(function () { location.href = '/connexion'; });
+        });
+      });
+    }).catch(function () { /* no accounts */ });
     var key = function (name) { return 'site-last-file:' + name; };
     try { localStorage.setItem(key(site), file); } catch (err) { /* private mode */ }
     var select = document.getElementById('site-switch');

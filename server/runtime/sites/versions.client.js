@@ -49,7 +49,7 @@
             versions = r.data;
             document.getElementById('v-rows').innerHTML = versions.map(function (v, i) {
                 return '<tr' + (current === v.version_id ? ' style="background:#e3f2fd"' : '') + '><td>' + date(v.time) + (i === 0 ? ' <b>(dernière)</b>' : '') + '</td>' +
-                    '<td>' + esc(v.typeText) + '</td><td>' + esc(v.comment) + '</td><td>' + esc(v.summary) + '</td>' +
+                    '<td>' + esc(v.typeText) + (v.user ? '<br><small>par ' + esc(v.user) + '</small>' : '') + '</td><td>' + esc(v.comment) + '</td><td>' + esc(v.summary) + '</td>' +
                     '<td style="white-space:nowrap"><button data-show="' + esc(v.version_id) + '">Modifications</button> ' +
                     (i === 0 ? '' : '<button data-restore="' + esc(v.version_id) + '">Restaurer</button>') + '</td></tr>';
             }).join('') || '<tr><td colspan="5" class="empty">Aucune version : elles sont créées à chaque enregistrement de l’éditeur.</td></tr>';

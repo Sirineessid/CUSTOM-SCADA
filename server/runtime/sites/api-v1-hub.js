@@ -19,6 +19,10 @@
 const http = require('http');
 const express = require('express');
 const { ApiError, badRequest, notFound, send, sendError, handle, jsonErrors, body } = require('./api-v1-common');
+const accounts = require('./accounts');
+
+/** with the security of the sites: only the sites the user can open */
+const visible = (req, list, key) => (req.scadaUser && accounts.enabled() ? list.filter(s => accounts.roleOn(req.scadaUser, s[key])) : list);
 
 /** services answered by the main FUXA, the others are forwarded to the site */
 const HUB_ACTIONS = ['start', 'stop', 'export'];
@@ -80,7 +84,7 @@ function router(manager, settings, logger) {
      * (equipments connected, last data, tags without update, errors)
      */
     app.get('/diagnostic', h(async (req, res) => {
-        const sites = await manager.list();
+        const sites = visible(req, await manager.list(), 'name');
         const result = await Promise.all(sites.map(async info => {
             const item = { site_id: info.name, state: info.running ? 'running' : info.stopped ? 'stopped' : 'starting', url: info.url };
             if (!info.running) {
@@ -106,7 +110,7 @@ function router(manager, settings, logger) {
     }));
 
     app.get('/sites', h(async (req, res) => {
-        const list = await manager.list();
+        const list = visible(req, await manager.list(), 'name');
         send(res, list.map(siteData), { count: list.length });
     }));
 
@@ -226,6 +230,11 @@ function siteData(info) {
 function forward(site, req, res, target) {
     const query = (req.originalUrl || req.url).split('?')[1];
     const headers = Object.assign({}, req.headers, { 'x-forwarded-for': req.socket.remoteAddress });
+    // user checked by the gate, signed for the site (a user header of the browser is never forwarded)
+    delete headers[accounts.USER_HEADER];
+    if (req.scadaUser && accounts.enabled()) {
+        headers[accounts.USER_HEADER] = accounts.userHeader(req.scadaUser, site.name);
+    }
     let data = null;
     if (req._body) {
         // body already read by FUXA: sent again in JSON

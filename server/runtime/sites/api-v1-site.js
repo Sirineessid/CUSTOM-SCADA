@@ -575,7 +575,7 @@ function router(runtime, settings, siteId) {
         }
         return version;
     };
-    const versionInfo = v => ({ version_id: v.id, time: v.time, type: v.type, typeText: versions.TYPES[v.type] || v.type, comment: v.comment || '' });
+    const versionInfo = v => ({ version_id: v.id, time: v.time, type: v.type, typeText: versions.TYPES[v.type] || v.type, comment: v.comment || '', user: v.user || null });
     /** version compared: ?with=<version_id> | current | previous (default: the previous version) */
     const compareWith = async (version, other) => {
         if (other && other !== 'previous') {
@@ -599,7 +599,7 @@ function router(runtime, settings, siteId) {
         if (!comment) {
             throw badRequest('Champ comment manquant : description de la version.', { field: 'comment' });
         }
-        const entry = await versions.snapshot({ type: 'manual', comment });
+        const entry = await versions.snapshot({ type: 'manual', comment, user: req.scadaUser ? req.scadaUser.username : null });
         send(res, Object.assign(versionInfo(entry), { summary: entry.summary, size: entry.size }), meta(), 201);
     }));
 

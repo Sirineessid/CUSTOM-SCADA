@@ -337,6 +337,10 @@ if (parsedArgs.port !== undefined) {
     }
 }
 settings.uiHost = settings.uiHost || "0.0.0.0";
+// custom-SCADA: the instance of a site is reached only through the main FUXA (its security checks every request)
+if (process.env.FUXA_SITE) {
+    settings.uiHost = '127.0.0.1';
+}
 
 // Wait ending initialization
 events.once('init-runtime-ok', function () {
@@ -466,6 +470,11 @@ app.use(allowCrossDomain);
 if (!process.env.FUXA_SITE) {
     require('./runtime/sites').init(app, server, settings, logger);
 } else {
+    // user sent by the main FUXA (central accounts), writes of the supervision checked and kept (audit.js)
+    const audit = require('./runtime/sites/audit');
+    audit.init(runtime, settings, logger);
+    app.use(audit.middleware);
+    audit.socket(io);
     // instance of a site: API of the site (tags, values, history) under /site/<name>/api/site
     app.use(BASE_PATH + '/api/site', require('./runtime/sites/api').router(runtime, settings, process.env.FUXA_SITE));
     // API v1 of the site, called through the main FUXA (/api/v1/sites/<name>/...)

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connexion - custom-SCADA</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; background: #1f3864; color: #222; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .box { background: #fff; border-radius: 8px; padding: 28px 32px; width: min(380px, 90vw); box-shadow: 0 8px 30px rgba(0,0,0,0.3); }
+  h1 { margin: 0 0 4px; color: #0d47a1; font-size: 24px; } p { color: #555; font-size: 14px; margin: 0 0 18px; }
+  label { display: block; font-size: 14px; margin: 12px 0 4px; color: #333; }
+  input { width: 100%; box-sizing: border-box; padding: 9px; border: 1px solid #b0bec5; border-radius: 4px; font-size: 15px; }
+  button { margin-top: 18px; width: 100%; padding: 10px; background: #1e88e5; color: #fff; border: none; border-radius: 4px; font-size: 15px; cursor: pointer; }
+  .msg { margin-top: 12px; font-size: 14px; min-height: 18px; } .error { color: #c62828; font-weight: bold; } .info { color: #1565c0; }
+</style>
+</head>
+<body>
+<form class="box" id="form">
+  <h1>custom-SCADA</h1>
+  <p>Connexion aux sites</p>
+  <label for="username">Identifiant</label>
+  <input id="username" autocomplete="username" required autofocus>
+  <label for="password">Mot de passe</label>
+  <input id="password" type="password" autocomplete="current-password" required>
+  <button type="submit">Se connecter</button>
+  <div id="msg" class="msg"></div>
+</form>
+<script>
+  (function () {
+    var params = new URLSearchParams(location.search);
+    var next = params.get('next') || '/';
+    // only an address of this server
+    if (!/^\/(?!\/)/.test(next) || /^\/connexion/.test(next)) { next = '/'; }
+    var msg = document.getElementById('msg');
+    if (params.get('expire')) { msg.textContent = 'Session expirée : se reconnecter.'; msg.className = 'msg info'; }
+    fetch('/api/v1/auth/status').then(function (r) { return r.json(); }).then(function (r) {
+      if (r.data && r.data.setup) {
+        msg.innerHTML = 'Aucun compte : <a href="/comptes">créer le premier administrateur</a>.';
+        msg.className = 'msg info';
+      } else if (r.data && !r.data.enabled) {
+        msg.textContent = 'La sécurité des sites n’est pas activée : la connexion n’est pas obligatoire.';
+        msg.className = 'msg info';
+      }
+    }).catch(function () { /* server not ready */ });
+    document.getElementById('form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      msg.textContent = 'Connexion...';
+      msg.className = 'msg';
+      fetch('/api/v1/auth/login', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ username: document.getElementById('username').value.trim(), password: document.getElementById('password').value })
+      }).then(function (r) {
+        return r.json().then(function (body) {
+          if (!r.ok) { throw new Error(body.error ? body.error.message : 'Erreur ' + r.status); }
+          location.href = next;
+        });
+      }).catch(function (err) { msg.textContent = err.message; msg.className = 'msg error'; });
+    });
+  })();
+</script>
+</body>
+</html>

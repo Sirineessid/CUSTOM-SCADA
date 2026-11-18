@@ -57,11 +57,24 @@
 
     /** service of the API v1 of the site: path /tags, /history?..., body (PUT, POST) */
     function request(method, path, body, params) {
-        var options = { method: method, headers: headers(body !== undefined) };
+        var options = { method: method, headers: headers(body !== undefined), credentials: 'same-origin' };
         if (body !== undefined) {
             options.body = JSON.stringify(body);
         }
-        return fetch(base + path + queryText(params), options).then(answer);
+        return fetch(base + path + queryText(params), options).then(answer).catch(function (err) {
+            // security of the sites (central accounts): login page, or password typed again for a sensitive operation
+            if (err.status === 401 && /login_required|session_expired/.test(err.code || '')) {
+                location.href = '/connexion?next=' + encodeURIComponent(location.pathname + location.search) + (err.code === 'session_expired' ? '&expire=1' : '');
+            }
+            if (err.status === 403 && err.code === 'confirmation_required') {
+                var password = window.prompt('Opération sensible : confirmer votre mot de passe');
+                if (password) {
+                    return fetch('/api/v1/auth/confirm', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password: password }) }).then(answer).then(function () { return request(method, path, body, params); });
+                }
+            }
+            throw err;
+        });
     }
 
     function get(path, params) {

@@ -149,6 +149,8 @@ async function snapshot(options) {
     fs.writeFileSync(path.join(dir(), `${id}.json.gz`), data);
     const entry = {
         id, time, type, comment, hash, size: data.length,
+        // user of the change (central accounts, audit.js), null when the security is disabled
+        user: options.user || require('./audit').lastUser(),
         pages: ((state.project.hmi && state.project.hmi.views) || []).length,
         summary: base ? summarize(compare(base, state)) : 'première version'
     };

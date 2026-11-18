@@ -20,6 +20,8 @@ const net = require('net');
 const { spawn } = require('child_process');
 const siteTemplate = require('./template');
 const zip = require('./zip');
+const accounts = require('./accounts');
+var accountsHttp = null;
 
 const SITE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
 const SITE_URL = /^\/site\/([^/?#]+)(\/.*)?$/;
@@ -62,6 +64,16 @@ function init(app, server, _settings, _logger) {
         fs.mkdirSync(sitesDir);
     }
     loadSites();
+    // central accounts: every request is checked first (security of the sites, accounts-http.js)
+    accounts.init(sitesDir, logger);
+    accountsHttp = require('./accounts-http').create({
+        names: () => Object.keys(sites).sort(),
+        dir: () => sitesDir,
+        request: (name, method, apiPath) => sites[name] && sites[name].running ? requestSite(sites[name], method, apiPath) : Promise.reject(new Error('site arrêté'))
+    }, settings, logger);
+    app.use(accountsHttp.gate);
+    app.use(accountsHttp.pages);
+    app.use('/api/v1', accountsHttp.router);
     // API v1: management of the sites and access to the data of each site (api-v1-hub.js)
     app.use('/api/v1', require('./api-v1-hub').router({
         get: name => sites[name] || null,
@@ -156,7 +168,8 @@ function apiSites(req, res, name, action) {
             return task ? task.then(result => res.json(result)).catch(fail) : res.status(405).end();
         }
         if (req.method === 'GET') {
-            listSites().then(result => res.json(result)).catch(err => res.status(500).json({ error: 'sites_error', message: err.toString() }));
+            // with the security of the sites: only the sites the user can open
+            listSites().then(result => res.json(req.scadaUser && accounts.enabled() ? result.filter(s => accounts.roleOn(req.scadaUser, s.name)) : result)).catch(err => res.status(500).json({ error: 'sites_error', message: err.toString() }));
         } else if (req.method === 'POST' && req.query && req.query.import !== undefined) {
             importSite(req, String(req.query.import)).then(site => res.json(siteInfo(site))).catch(fail);
         } else if (req.method === 'POST') {
@@ -576,6 +589,8 @@ function start(site) {
         cwd: settings.appDir,
         env: Object.assign({}, process.env, {
             BASE_PATH: `/site/${site.name}`,
+            // secret of the signature of the users sent by the main FUXA (accounts.js)
+            SCADA_AUTH_SECRET: accounts.siteSecret(),
             FUXA_SITE: site.name,
             // the plugins (S7, OPC UA...) installed in the main FUXA are used by all the sites
             FUXA_PACKAGE_DIR: settings.packageDir
@@ -658,6 +673,18 @@ function requestSite(site, method, apiPath, body) {
     });
 }
 
+/**
+ * headers forwarded to a site: the user header of the browser is removed, the user checked by the gate
+ * (accounts-http.js) is added, signed for the site
+ */
+function withUser(headers, user, siteName) {
+    delete headers[accounts.USER_HEADER];
+    if (user && accounts.enabled()) {
+        headers[accounts.USER_HEADER] = accounts.userHeader(user, siteName);
+    }
+    return headers;
+}
+
 /** forward an http request to the instance of the site (the path keeps /site/<name>, it is the BASE_PATH of the instance) */
 function forward(site, req, res) {
     if (!site.running) {
@@ -665,7 +692,7 @@ function forward(site, req, res) {
     }
     const proxy = http.request({
         host: '127.0.0.1', port: site.port, method: req.method, path: req.originalUrl || req.url,
-        headers: Object.assign({}, req.headers, { 'x-forwarded-for': req.socket.remoteAddress })
+        headers: withUser(Object.assign({}, req.headers, { 'x-forwarded-for': req.socket.remoteAddress }), req.scadaUser, site.name)
     }, proxyRes => {
         res.writeHead(proxyRes.statusCode, proxyRes.headers);
         proxyRes.pipe(res);
@@ -687,10 +714,22 @@ function onUpgrade(req, socket, head) {
     if (!site) {
         return;     // not a site: handled by the socket.io of the main FUXA
     }
+    // security of the sites: session and access to the site, user signed for the site
+    const check = accountsHttp.checkUpgrade(req, site.name);
+    if (!check.ok) {
+        socket.end('HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n');
+        return;
+    }
     const target = net.connect(site.port, '127.0.0.1', () => {
         let headers = `${req.method} ${req.url} HTTP/${req.httpVersion}\r\n`;
         for (let i = 0; i < req.rawHeaders.length; i += 2) {
-            headers += `${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`;
+            // a user header sent by the browser is never forwarded
+            if (req.rawHeaders[i].toLowerCase() !== accounts.USER_HEADER) {
+                headers += `${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}\r\n`;
+            }
+        }
+        if (check.header) {
+            headers += `${accounts.USER_HEADER}: ${check.header}\r\n`;
         }
         target.write(headers + '\r\n');
         if (head && head.length) {
