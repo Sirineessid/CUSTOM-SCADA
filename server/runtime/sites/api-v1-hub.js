@@ -2,6 +2,8 @@
  * custom-SCADA: API v1 of the main FUXA (/api/v1): management of the sites, and access to the data of each site
  *
  * GET    /api/v1                              list of the services
+ * GET    /api/v1/alarms[/history|/stats]      alarms of all the sites (?site= to choose)
+ * *      /api/v1/notifications              email notifications of the alarms (administrators)
  * GET    /api/v1/sites                        sites (state, address, pages, files)
  * POST   /api/v1/sites                        create a site { site_id }
  * GET    /api/v1/sites/:site_id               one site
@@ -67,6 +69,8 @@ function router(manager, settings, logger) {
                 alarms: ['GET /api/v1/sites/{site_id}/alarms', 'GET /api/v1/sites/{site_id}/alarms/history',
                     'POST /api/v1/sites/{site_id}/alarms/{alarm_id}/ack', 'POST /api/v1/sites/{site_id}/alarms/ack',
                     'GET /api/v1/sites/{site_id}/alarms/config', 'PUT|DELETE /api/v1/sites/{site_id}/alarms/config/{name}'],
+                alarmsAllSites: ['GET /api/v1/alarms?site=', 'GET /api/v1/alarms/history?site=&from=&to=', 'GET /api/v1/alarms/stats?site=&from=&to='],
+                notifications: ['GET|PUT /api/v1/notifications', 'POST /api/v1/notifications/test { to }', 'GET /api/v1/notifications/history'],
                 diagnostic: ['GET /api/v1/diagnostic', 'GET /api/v1/sites/{site_id}/diagnostic', 'GET /api/v1/sites/{site_id}/diagnostic/tags',
                     'GET /api/v1/sites/{site_id}/diagnostic/events'],
                 versions: ['GET /api/v1/sites/{site_id}/versions', 'POST /api/v1/sites/{site_id}/versions { comment }',
@@ -107,6 +111,82 @@ function router(manager, settings, logger) {
         }));
         const count = state => result.filter(s => s.communication === state).length;
         send(res, result, { count: result.length, time: Date.now(), ok: count('ok'), warning: count('warning'), error: count('error'), stopped: count('stopped') });
+    }));
+
+    // ---------------------------------------------------------------- alarms of all the sites
+    const LEVEL_KEYS = ['highhigh', 'high', 'low', 'info'];
+    /** sites asked (?site=a,b) among the started sites the user can open, with the answer of each one */
+    async function fromSites(req, apiPath) {
+        const asked = String(req.query.site || '').split(',').map(s => s.trim()).filter(Boolean);
+        const sites = visible(req, await manager.list(), 'name').filter(s => !asked.length || asked.includes(s.name));
+        const query = Object.keys(req.query).filter(k => k !== 'site').map(k => `${encodeURIComponent(k)}=${encodeURIComponent(req.query[k])}`).join('&');
+        return Promise.all(sites.map(async info => {
+            if (!info.running) {
+                return { site: info.name, error: info.stopped ? 'site arrêté' : 'site en démarrage' };
+            }
+            try {
+                const answer = await Promise.race([
+                    manager.request(manager.get(info.name), 'GET', `/api/v1/${apiPath}${query ? '?' + query : ''}`),
+                    new Promise((resolve, reject) => setTimeout(() => reject(new Error('timeout')), 15000))
+                ]);
+                return { site: info.name, answer };
+            } catch (err) {
+                return { site: info.name, error: String(err.message).slice(0, 200) };
+            }
+        }));
+    }
+    const siteErrors = results => results.filter(r => r.error).map(r => ({ site_id: r.site, error: r.error }));
+    const withSite = results => [].concat(...results.filter(r => r.answer).map(r => r.answer.data.map(a => Object.assign({ site_id: r.site }, a))));
+    const countLevels = list => {
+        const counts = { highhigh: 0, high: 0, low: 0, info: 0, toack: 0 };
+        list.forEach(a => { counts[a.type] = (counts[a.type] || 0) + 1; if (a.toack) { counts.toack++; } });
+        return counts;
+    };
+
+    app.get('/alarms', h(async (req, res) => {
+        const results = await fromSites(req, 'alarms');
+        const list = withSite(results).sort((x, y) => (LEVEL_KEYS.indexOf(x.type) - LEVEL_KEYS.indexOf(y.type)) || (y.ontime || 0) - (x.ontime || 0));
+        const bySite = results.map(r => ({ site_id: r.site, count: r.answer ? r.answer.data.length : null, counts: r.answer ? countLevels(r.answer.data) : null, error: r.error || null }));
+        send(res, list, { count: list.length, counts: countLevels(list), sites: bySite, errors: siteErrors(results), time: Date.now() });
+    }));
+
+    app.get('/alarms/history', h(async (req, res) => {
+        const results = await fromSites(req, 'alarms/history');
+        const list = withSite(results).sort((x, y) => (y.ontime || 0) - (x.ontime || 0));
+        const first = results.find(r => r.answer);
+        send(res, list, { count: list.length, counts: countLevels(list), from: first ? first.answer.meta.from : null, to: first ? first.answer.meta.to : null, errors: siteErrors(results) });
+    }));
+
+    /** statistics of the sites added together; by equipment: "site / equipment" */
+    app.get('/alarms/stats', h(async (req, res) => {
+        const results = await fromSites(req, 'alarms/stats');
+        const stats = { total: 0, byLevel: { highhigh: 0, high: 0, low: 0, info: 0 }, bySource: {}, bySite: [], byDevice: [], byDay: {}, top: [] };
+        results.filter(r => r.answer).forEach(r => {
+            const d = r.answer.data;
+            stats.total += d.total;
+            Object.keys(d.byLevel).forEach(k => { stats.byLevel[k] = (stats.byLevel[k] || 0) + d.byLevel[k]; });
+            Object.keys(d.bySource).forEach(k => { stats.bySource[k] = (stats.bySource[k] || 0) + d.bySource[k]; });
+            stats.bySite.push({ site_id: r.site, count: d.total });
+            d.byDevice.forEach(x => stats.byDevice.push({ device: `${r.site} / ${x.device}`, count: x.count }));
+            d.byDay.forEach(x => { stats.byDay[x.day] = (stats.byDay[x.day] || 0) + x.count; });
+            d.top.forEach(x => stats.top.push(Object.assign({ site_id: r.site }, x)));
+        });
+        stats.bySite.sort((x, y) => y.count - x.count);
+        stats.byDevice.sort((x, y) => y.count - x.count);
+        stats.byDay = Object.keys(stats.byDay).sort().map(k => ({ day: k, count: stats.byDay[k] }));
+        stats.top = stats.top.sort((x, y) => y.count - x.count || y.duration - x.duration).slice(0, 30);
+        send(res, stats, { errors: siteErrors(results) });
+    }));
+
+    // ---------------------------------------------------------------- email notifications (administrators: gate)
+    const notifier = require('./notifier');
+    const by = req => (req.scadaUser ? req.scadaUser.username : null);
+    app.get('/notifications', h((req, res) => send(res, notifier.getConfig(), notifier.status())));
+    app.put('/notifications', withBody, h((req, res) => send(res, notifier.setConfig(body(req), by(req)), notifier.status())));
+    app.post('/notifications/test', withBody, h(async (req, res) => send(res, await notifier.test(body(req).to, by(req)))));
+    app.get('/notifications/history', h((req, res) => {
+        const list = notifier.history(Math.min(Number(req.query.limit) || 200, 2000));
+        send(res, list, { count: list.length });
     }));
 
     app.get('/sites', h(async (req, res) => {

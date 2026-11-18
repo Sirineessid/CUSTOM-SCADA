@@ -64,6 +64,9 @@ function create(manager, settings, logger) {
             // FUXA of the site: acknowledgement of the alarms by the operators, the other changes by the engineers
             return { site, role: /^\/api\/(alarmack|alarms\/ack)/i.test(rest) ? 'operateur' : 'ingenieur' };
         }
+        if (/^\/api\/v1\/notifications(\/|$)/.test(url)) {
+            return { hub: true, role: 'admin' };
+        }
         if (/^\/api\/v1\/accounts(\/|$)/.test(url)) {
             return { hub: true, role: 'admin', confirm: write && (method === 'DELETE' || /\/settings$/.test(url)) };
         }
@@ -335,6 +338,8 @@ function create(manager, settings, logger) {
     pages.get('/connexion', page('connexion.html'));
     pages.get('/comptes', page('comptes.html'));
     pages.get('/comptes.js', page('comptes.client.js'));
+    pages.get('/alarmes', page('alarmes-sites.html'));
+    pages.get('/alarmes-sites.js', page('alarmes-sites.client.js'));
 
     return { gate, checkUpgrade, router, pages };
 }

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alarmes des sites - custom-SCADA</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; color: #222; background: #f4f5f7; }
+  .top { background: #1f3864; color: #fff; padding: 10px 20px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+  .top a { color: #fff; text-decoration: none; } .top .sp { flex: 1; }
+  main { padding: 16px 20px; }
+  h1 { color: #0d47a1; margin: 4px 0; } h3 { color: #2e74b5; margin: 14px 0 6px; }
+  .info { color: #555; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; background: #fff; font-size: 13px; }
+  th { background: #1f3864; color: #fff; text-align: left; padding: 5px 8px; } td { border: 1px solid #ccc; padding: 4px 8px; vertical-align: top; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+  input, select { padding: 4px; } button { padding: 5px 12px; cursor: pointer; }
+  button.primary { background: #1e88e5; color: #fff; border: none; border-radius: 3px; }
+  .status { font-size: 13px; color: #555; } .error { color: #c62828; font-weight: bold; }
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid #1f3864; margin: 12px 0 6px; flex-wrap: wrap; }
+  .tabs button { border: 1px solid #cfd8dc; border-bottom: none; background: #eceff1; border-radius: 6px 6px 0 0; padding: 7px 16px; }
+  .tabs button.on { background: #1f3864; color: #fff; }
+  .card { background: #fff; border: 1px solid #cfd8dc; border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
+  .cards { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+  .cards .card { margin: 0; min-width: 150px; font-size: 13px; color: #546e7a; } .cards .card b { display: block; font-size: 22px; color: #1f3864; margin-top: 4px; }
+  .cards .card a { color: inherit; text-decoration: none; }
+  .lvl { display: inline-block; padding: 1px 8px; border-radius: 10px; color: #fff; font-size: 12px; font-weight: bold; }
+  .lvl-highhigh { background: #c62828; } .lvl-high { background: #ef6c00; } .lvl-low { background: #f9a825; color: #222; } .lvl-info { background: #1565c0; }
+  tr.row-critical td { background: #ffebee; } tr.row-critical td:first-child { border-left: 4px solid #c62828; }
+  .src { font-size: 11px; color: #546e7a; background: #eceff1; border-radius: 8px; padding: 0 6px; margin-left: 4px; }
+  .bad { color: #c62828 !important; } .empty { color: #78909c; text-align: center; padding: 14px; }
+  .hbar { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 13px; } .hbar span:first-child { min-width: 220px; }
+  .hbar i { display: inline-block; height: 14px; background: #1f3864; border-radius: 3px; min-width: 2px; }
+  .scroll { max-height: 600px; overflow: auto; }
+  .st { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
+  .st-ok { background: #e8f5e9; color: #1b5e20; } .st-error { background: #ffebee; color: #b71c1c; } .st-info { background: #e3f2fd; color: #0d47a1; }
+  fieldset { border: 1px solid #cfd8dc; border-radius: 6px; margin: 10px 0; background: #fff; } legend { color: #1f3864; font-weight: bold; }
+  label.blk { display: inline-flex; gap: 4px; align-items: center; margin-right: 12px; }
+</style>
+</head>
+<body>
+<div class="top"><b>custom-SCADA</b><a href="/editor">Éditeur</a><a href="/comptes">Comptes</a><span class="sp"></span><span id="who"></span><a href="#" id="logout" style="display:none">Déconnexion</a></div>
+<main>
+  <h1>Alarmes de tous les sites</h1>
+  <p class="info">Alarmes actives, historique et statistiques des sites que vous pouvez ouvrir (seuils, scénarios et communication), et notifications par email.
+     Les alarmes s’acquittent ici ou dans la page Alarmes de chaque site.</p>
+  <div id="app"></div>
+</main>
+<script src="/alarmes-sites.js"></script>
+</body>
+</html>

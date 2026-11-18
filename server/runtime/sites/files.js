@@ -41,6 +41,8 @@ function init(_runtime, settings, _logger, _siteName) {
     require('./diagnostic').init(runtime, settings, logger);
     // integrated simulator (simulator.js): restarted if it was running
     require('./simulator').init(runtime, settings, logger);
+    // alarms by scenario and alarms of communication (scenarios.js)
+    require('./scenarios').init(runtime, settings, logger);
     // the project is saved by setProject (import, new site) or setProjectData (editor)
     ['setProject', 'setProjectData'].forEach(fnc => {
         const original = runtime.project[fnc];
@@ -778,6 +780,7 @@ function navBar(current) {
   <span class="sep"></span>${pages}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('simulateur.html', 'Simulateur', current === 'simulateur.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
   <span class="sep"></span>${link(`${base}/editor`, '✎ Édition', false, 'Mode édition : éditeur FUXA du site')}
   <span style="flex:1"></span>
+  ${link('/alarmes', 'Alarmes des sites', false, 'Alarmes, statistiques et notifications de tous les sites')}
   <label class="site-switch" title="Passer à un autre site (sur sa dernière page consultée)">Site <select id="site-switch"><option>${esc(siteName)}</option></select></label>
   <span id="nav-user" class="site-switch"></span>
 </nav>
@@ -873,6 +876,10 @@ function document(title, body) {
   .tabs { display: flex; gap: 4px; border-bottom: 2px solid #1f3864; margin: 12px 0 6px; }
   .tabs button { border: 1px solid #cfd8dc; border-bottom: none; background: #eceff1; border-radius: 6px 6px 0 0; padding: 7px 16px; }
   .tabs button.on { background: #1f3864; color: #fff; border-color: #1f3864; }
+  .hbar { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 13px; } .hbar span:first-child { min-width: 160px; }
+  .hbar i { display: inline-block; height: 14px; background: #1f3864; border-radius: 3px; min-width: 2px; }
+  .sc-cond { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
+  .src { font-size: 11px; color: #546e7a; background: #eceff1; border-radius: 8px; padding: 0 6px; margin-left: 4px; }
   .st { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
   .st-ok { background: #e8f5e9; color: #1b5e20; } .st-warning { background: #fff3e0; color: #e65100; } .st-error { background: #ffebee; color: #b71c1c; }
   .st-off { background: #eceff1; color: #546e7a; } .st-info { background: #e3f2fd; color: #0d47a1; }

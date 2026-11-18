@@ -324,8 +324,11 @@ function router(runtime, settings, siteId) {
         const text = String(query.text || '').trim().toLowerCase();
         const tag = String(query.tag || '').trim();
         const device = String(query.device || '').trim();
+        // source: alarme (threshold of FUXA), scenario, communication
+        const sources = list(query.source);
         return alarms.filter(a => (!types.length || types.includes(a.type)) && (!tag || a.tag === tag || a.name === tag) &&
-            (!device || a.device === device) && (!text || `${a.text} ${a.group} ${a.name} ${a.tag || ''}`.toLowerCase().includes(text)));
+            (!device || a.device === device) && (!sources.length || sources.includes(a.source)) &&
+            (!text || `${a.text} ${a.group} ${a.name} ${a.tag || ''}`.toLowerCase().includes(text)));
     };
 
     const countLevels = alarms => {
@@ -338,9 +341,13 @@ function router(runtime, settings, siteId) {
         return counts;
     };
 
+    const scenarios = require('./scenarios');
+    const userOf = req => (req.scadaUser ? req.scadaUser.username : req.userId || null);
+
     app.get('/alarms', h(async (req, res) => {
         const defs = await alarmTags();
-        const all = (runtime.alarmsMgr.getAlarmsValues(null, ADMIN) || []).map(a => alarmInfo(a, defs));
+        // alarms of FUXA + events of the scenarios and of the communication (scenarios.js)
+        const all = (runtime.alarmsMgr.getAlarmsValues(null, ADMIN) || []).concat(scenarios.active()).map(a => alarmInfo(a, defs));
         // the critical alarms first, then the newest
         const alarms = filterAlarms(all, req.query).sort((a, b) => LEVELS.indexOf(a.type) - LEVELS.indexOf(b.type) || (b.ontime || 0) - (a.ontime || 0));
         send(res, alarms, meta({ count: alarms.length, time: Date.now(), counts: countLevels(all) }));
@@ -348,11 +355,40 @@ function router(runtime, settings, siteId) {
 
     app.get('/alarms/history', h(async (req, res) => {
         const { from, to } = period(req.query, 24 * 3600 * 1000, MAX_HISTORY);
+        const alarms = filterAlarms(await alarmHistory(from, to), req.query).sort((a, b) => (b.ontime || 0) - (a.ontime || 0));
+        send(res, alarms, meta({ from, to, count: alarms.length, counts: countLevels(alarms) }));
+    }));
+
+    /** history of the alarms of FUXA and of the events of the scenarios */
+    const alarmHistory = async (from, to) => {
         const history = await runtime.alarmsMgr.getAlarmsHistory({ start: from, end: to }, ADMIN);
         const defs = await alarmTags();
-        const alarms = filterAlarms(history.filter(a => LEVELS.includes(a.type)).map(a => alarmInfo(a, defs)), req.query)
-            .sort((a, b) => (b.ontime || 0) - (a.ontime || 0));
-        send(res, alarms, meta({ from, to, count: alarms.length, counts: countLevels(alarms) }));
+        return history.filter(a => LEVELS.includes(a.type)).concat(scenarios.history(from, to)).map(a => alarmInfo(a, defs));
+    };
+
+    /**
+     * statistics of the alarms of the period: by priority, by source, by equipment, by day,
+     * and the most frequent alarms (count, total duration, last time)
+     */
+    app.get('/alarms/stats', h(async (req, res) => {
+        const { from, to } = period(req.query, 7 * 24 * 3600 * 1000, MAX_HISTORY);
+        send(res, alarmStats(filterAlarms(await alarmHistory(from, to), req.query)), meta({ from, to }));
+    }));
+
+    // scenarios and alarms of communication
+    app.get('/alarms/scenarios', h((req, res) => {
+        send(res, scenarios.getConfig(), meta({ levels: scenarios.LEVELS, operators: scenarios.OPS }));
+    }));
+
+    app.put('/alarms/scenarios', h((req, res) => {
+        send(res, scenarios.setConfig(body(req)), meta());
+    }));
+
+    /** scenarios of a pumping station (tags of the simulator), added to the existing ones (same name: not added) */
+    app.post('/alarms/scenarios/preset', h((req, res) => {
+        const current = scenarios.getConfig().rules;
+        const added = scenarios.preset().filter(r => !current.some(c => c.name === r.name));
+        send(res, scenarios.setConfig({ rules: current.concat(added) }), meta({ added: added.length }), 201);
     }));
 
     // thresholds of the alarms of the tags (alarm definitions of FUXA)
@@ -399,17 +435,24 @@ function router(runtime, settings, siteId) {
     }));
 
     app.post('/alarms/ack', h(async (req, res) => {
-        const changed = await runtime.alarmsMgr.setAlarmAck(null, req.userId || null, ADMIN);
-        send(res, { acknowledged: !!changed }, meta());
+        const changed = await runtime.alarmsMgr.setAlarmAck(null, userOf(req), ADMIN);
+        const events = scenarios.ack(null, userOf(req));
+        send(res, { acknowledged: !!changed || events > 0 }, meta());
     }));
 
     app.post('/alarms/:alarm_id/ack', h(async (req, res) => {
         const id = req.params.alarm_id;
+        if (id.startsWith('evt:')) {
+            if (!scenarios.exists(id)) {
+                throw notFound('alarm_not_found', `Alarme active inconnue dans le site ${siteId} : ${id}`);
+            }
+            return send(res, { alarm_id: id, acknowledged: scenarios.ack(id, userOf(req)) > 0 }, meta());
+        }
         const exists = (runtime.alarmsMgr.getAlarmsValues(null, ADMIN) || []).some(a => a.name === id);
         if (!exists) {
             throw notFound('alarm_not_found', `Alarme active inconnue dans le site ${siteId} : ${id}`);
         }
-        const changed = await runtime.alarmsMgr.setAlarmAck(id, req.userId || null, ADMIN);
+        const changed = await runtime.alarmsMgr.setAlarmAck(id, userOf(req), ADMIN);
         send(res, { alarm_id: id, acknowledged: !!changed }, meta());
     }));
 
@@ -737,16 +780,56 @@ function alarmConfig(a, tags) {
 }
 
 function alarmInfo(a, defs) {
-    const id = a.type && !String(a.name).includes('^~^') ? `${a.name}^~^${a.type}` : String(a.name);
-    const name = id.split('^~^')[0];
-    const def = (defs && defs[name]) || {};
+    // events of the scenarios and of the communication (scenarios.js): id evt:...
+    const event = !!a.source;
+    const id = event ? String(a.name) : a.type && !String(a.name).includes('^~^') ? `${a.name}^~^${a.type}` : String(a.name);
+    const name = event ? a.eventName : id.split('^~^')[0];
+    const def = event ? { tag: a.tagName, device: a.device } : (defs && defs[name]) || {};
     return {
         alarm_id: id, name: name, tag: def.tag || null, device: def.device || null, type: a.type,
+        source: event ? a.source : 'alarme', sourceText: SOURCE_TEXT[event ? a.source : 'alarme'],
         priority: LEVEL_TEXT[a.type] || a.type, critical: a.type === 'highhigh', statusText: STATUS_TEXT[a.status || ''] || a.status,
         text: a.text || '', group: a.group || '', status: a.status || '',
         value: a.value === undefined ? null : a.value,
         ontime: a.ontime || null, offtime: a.offtime || null, acktime: a.acktime || null,
         toack: a.toack === undefined ? undefined : !!a.toack, userack: a.userack || undefined
+    };
+}
+
+const SOURCE_TEXT = { alarme: 'seuil', scenario: 'scénario', communication: 'communication' };
+
+/** statistics of a list of alarms (history): the most frequent ones first */
+function alarmStats(alarms) {
+    const byLevel = { highhigh: 0, high: 0, low: 0, info: 0 };
+    const bySource = {}, byDevice = {}, byDay = {}, groups = {};
+    alarms.forEach(a => {
+        byLevel[a.type] = (byLevel[a.type] || 0) + 1;
+        bySource[a.sourceText] = (bySource[a.sourceText] || 0) + 1;
+        const device = a.device || 'non défini';
+        byDevice[device] = (byDevice[device] || 0) + 1;
+        if (a.ontime) {
+            const d = new Date(a.ontime);
+            const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            byDay[day] = (byDay[day] || 0) + 1;
+        }
+        const key = `${a.name}|${a.type}`;
+        const g = groups[key] = groups[key] || { name: a.name, text: a.text, tag: a.tag, device: a.device, type: a.type, priority: a.priority,
+            source: a.source, sourceText: a.sourceText, count: 0, duration: 0, acknowledged: 0, last: 0 };
+        g.count++;
+        if (a.ontime) {
+            g.duration += Math.max(0, (a.offtime || Date.now()) - a.ontime);
+            g.last = Math.max(g.last, a.ontime);
+        }
+        if (a.acktime) {
+            g.acknowledged++;
+        }
+    });
+    const top = Object.values(groups).sort((x, y) => y.count - x.count || y.duration - x.duration);
+    return {
+        total: alarms.length, byLevel, bySource,
+        byDevice: Object.keys(byDevice).map(k => ({ device: k, count: byDevice[k] })).sort((x, y) => y.count - x.count),
+        byDay: Object.keys(byDay).sort().map(k => ({ day: k, count: byDay[k] })),
+        top: top.slice(0, 20)
     };
 }
 

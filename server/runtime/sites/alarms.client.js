@@ -41,6 +41,10 @@
         return v === null || v === undefined || v === '' ? '' : isFinite(n) ? String(Math.round(n * 1000) / 1000) : String(v);
     }
 
+    function srcBadge(a) {
+        return a.source && a.source !== 'alarme' ? '<span class="src">' + esc(a.sourceText) + '</span>' : '';
+    }
+
     function badge(type) {
         return '<span class="lvl lvl-' + esc(type) + '">' + esc(LEVEL_NAME[type] || type) + '</span>';
     }
@@ -48,11 +52,12 @@
     app.innerHTML =
         '<div class="alarm-counts" id="a-counts"></div>' +
         '<div class="tabs"><button data-tab="active" class="on">Alarmes actives</button><button data-tab="history">Historique</button>' +
-        '<button data-tab="config">Seuils d’alarme</button></div>' +
+        '<button data-tab="config">Seuils d’alarme</button><button data-tab="scenarios">Scénarios</button><button data-tab="stats">Statistiques</button></div>' +
         '<div class="period" id="a-filters">' +
         '  <select id="f-device"><option value="">Tous les équipements</option></select>' +
         '  <select id="f-tag"><option value="">Tous les tags</option></select>' +
         LEVELS.map(function (l) { return '<label><input type="checkbox" class="f-level" value="' + l[0] + '" checked> ' + l[1] + '</label>'; }).join('') +
+        '  <select id="f-source"><option value="">Toutes les sources</option><option value="alarme">Seuils</option><option value="scenario">Scénarios</option><option value="communication">Communication</option></select>' +
         '  <input id="f-text" size="18" placeholder="Texte du message">' +
         '  <span id="f-period" style="display:none"><label>Du <input type="datetime-local" id="f-from"></label> <label>Au <input type="datetime-local" id="f-to"></label>' +
         '  <button data-hours="24">24 h</button><button data-hours="168">7 j</button><button data-hours="720">30 j</button> <button id="f-show" class="primary">Afficher</button></span>' +
@@ -67,7 +72,20 @@
         '(au-dessus, en dessous ou entre deux valeurs) pendant le délai choisi. Les alarmes critiques sont mises en évidence dans la liste des alarmes actives.</p>' +
         '<div class="period"><button id="c-new" class="primary">+ Nouvelle alarme</button><span id="c-status" class="status"></span></div>' +
         '<div id="c-form"></div>' +
-        '<table><thead><tr><th>Nom</th><th>Tag</th><th>Équipement</th><th>Seuils</th><th></th></tr></thead><tbody id="c-rows"></tbody></table></div>';
+        '<table><thead><tr><th>Nom</th><th>Tag</th><th>Équipement</th><th>Seuils</th><th></th></tr></thead><tbody id="c-rows"></tbody></table></div>' +
+        '<div id="tab-scenarios" style="display:none"><p class="info">Un scénario combine plusieurs conditions sur des tags (toutes vraies : ET, ou une seule : OU). ' +
+        'L’événement s’active quand le scénario reste vrai pendant le délai choisi, par exemple « pompe en marche et débit nul pendant 10 s ». ' +
+        'Les alarmes de communication s’activent seules quand un équipement ne communique plus.</p>' +
+        '<div class="period"><label><input type="checkbox" id="s-comm"> Alarmes de communication (critiques)</label> <label>après <input type="number" id="s-commdelay" min="0" max="3600" style="width:70px"> s</label>' +
+        ' <button id="s-commsave">Enregistrer</button></div>' +
+        '<div class="period"><button id="s-new" class="primary">+ Nouveau scénario</button><button id="s-preset">Ajouter les scénarios type « station de pompage »</button><span id="s-status" class="status"></span></div>' +
+        '<div id="s-form"></div>' +
+        '<table><thead><tr><th>Actif</th><th>Nom</th><th>Priorité</th><th>Conditions</th><th>Délai</th><th>Message</th><th></th></tr></thead><tbody id="s-rows"></tbody></table></div>' +
+        '<div id="tab-stats" style="display:none"><div class="period"><span id="st-status" class="status"></span></div>' +
+        '<div class="diag-cards" id="st-cards"></div>' +
+        '<div class="stats-grid" style="display:flex;flex-wrap:wrap;gap:30px"><div><h3>Par équipement</h3><div id="st-devices"></div></div><div><h3>Par jour</h3><div id="st-days"></div></div></div>' +
+        '<h3>Alarmes les plus fréquentes</h3><div class="history"><table><thead><tr><th>Priorité</th><th>Message</th><th>Source</th><th>Tag</th><th>Équipement</th><th>Nombre</th><th>Durée totale</th><th>Acquittées</th><th>Dernière</th></tr></thead>' +
+        '<tbody id="st-rows"></tbody></table></div></div>';
 
     // ---------------------------------------------------------------- filters
     function filters() {
@@ -76,7 +94,8 @@
             device: document.getElementById('f-device').value,
             tag: document.getElementById('f-tag').value,
             type: levels.length === LEVELS.length ? '' : (levels.join(',') || 'none'),
-            text: document.getElementById('f-text').value.trim()
+            text: document.getElementById('f-text').value.trim(),
+            source: document.getElementById('f-source').value
         };
     }
 
@@ -98,10 +117,12 @@
     function refreshTab() {
         if (tab === 'active') { loadActive(); }
         if (tab === 'history') { loadHistory(); }
+        if (tab === 'stats') { loadStats(); }
     }
 
     document.getElementById('f-device').addEventListener('change', function () { drawTagFilter(); refreshTab(); });
     document.getElementById('f-tag').addEventListener('change', refreshTab);
+    document.getElementById('f-source').addEventListener('change', refreshTab);
     document.querySelectorAll('.f-level').forEach(function (c) { c.addEventListener('change', refreshTab); });
     var textTimer = null;
     document.getElementById('f-text').addEventListener('input', function () { clearTimeout(textTimer); textTimer = setTimeout(refreshTab, 400); });
@@ -121,7 +142,7 @@
             drawCounts(r.meta.counts);
             document.getElementById('a-rows').innerHTML = r.data.map(function (a) {
                 return '<tr class="' + (a.critical ? 'row-critical' : '') + '"><td>' + badge(a.type) + '</td><td>' + date(a.ontime) + '</td><td>' + esc(a.tag) + '</td>' +
-                    '<td>' + esc(a.device) + '</td><td>' + esc(a.text) + (a.group ? ' <small>(' + esc(a.group) + ')</small>' : '') + '</td><td>' + esc(value(a.value)) + '</td>' +
+                    '<td>' + esc(a.device) + '</td><td>' + esc(a.text) + srcBadge(a) + (a.group ? ' <small>(' + esc(a.group) + ')</small>' : '') + '</td><td>' + esc(value(a.value)) + '</td>' +
                     '<td>' + esc(a.statusText) + '</td><td>' + duration(a) + '</td><td>' + (a.acktime ? date(a.acktime) + (a.userack ? ' (' + esc(a.userack) + ')' : '') : '') + '</td>' +
                     '<td>' + (a.toack ? '<button data-ack="' + esc(a.alarm_id) + '">Acquitter</button>' : '') + '</td></tr>';
             }).join('') || '<tr><td colspan="10" class="empty">Aucune alarme active.</td></tr>';
@@ -152,6 +173,18 @@
         document.getElementById(id).addEventListener('change', function () { relativeHours = null; });
     });
 
+    function periodOf(f) {
+        if (relativeHours) {
+            setPeriod(relativeHours);
+            f.to = Date.now();
+            f.from = f.to - relativeHours * 3600000;
+        } else {
+            f.from = new Date(document.getElementById('f-from').value).getTime();
+            f.to = new Date(document.getElementById('f-to').value).getTime();
+        }
+        return f;
+    }
+
     function loadHistory() {
         var f = filters();
         if (f.type === 'none') { document.getElementById('h-rows').innerHTML = '<tr><td colspan="10" class="empty">Aucune priorité cochée.</td></tr>'; return; }
@@ -173,7 +206,7 @@
             document.getElementById('h-rows').innerHTML = history.map(function (a) {
                 return '<tr class="' + (a.critical ? 'row-critical' : '') + '"><td>' + badge(a.type) + '</td><td>' + date(a.ontime) + '</td><td>' + date(a.offtime) + '</td>' +
                     '<td>' + duration(a) + '</td><td>' + (a.acktime ? date(a.acktime) + (a.userack ? ' (' + esc(a.userack) + ')' : '') : '') + '</td><td>' + esc(a.tag) + '</td>' +
-                    '<td>' + esc(a.device) + '</td><td>' + esc(a.text) + '</td><td>' + esc(value(a.value)) + '</td><td>' + esc(a.statusText) + '</td></tr>';
+                    '<td>' + esc(a.device) + '</td><td>' + esc(a.text) + srcBadge(a) + '</td><td>' + esc(value(a.value)) + '</td><td>' + esc(a.statusText) + '</td></tr>';
             }).join('') || '<tr><td colspan="10" class="empty">Aucune alarme sur cette période.</td></tr>';
             var c = r.meta.counts;
             status('h-status', history.length + ' alarme(s) : ' + c.highhigh + ' critique(s), ' + c.high + ' haute(s), ' + c.low + ' basse(s), ' + c.info + ' information(s)');
@@ -181,9 +214,9 @@
     }
 
     document.querySelectorAll('#f-period [data-hours]').forEach(function (b) {
-        b.addEventListener('click', function () { setPeriod(Number(b.getAttribute('data-hours'))); loadHistory(); });
+        b.addEventListener('click', function () { setPeriod(Number(b.getAttribute('data-hours'))); refreshTab(); });
     });
-    document.getElementById('f-show').addEventListener('click', loadHistory);
+    document.getElementById('f-show').addEventListener('click', refreshTab);
     document.getElementById('h-csv').addEventListener('click', function () {
         var head = ['Priorité', 'Début', 'Fin', 'Durée', 'Acquittement', 'Utilisateur', 'Tag', 'Équipement', 'Message', 'Valeur', 'État'];
         var rows = history.map(function (a) {
@@ -306,13 +339,165 @@
         }
     });
 
+    // ---------------------------------------------------------------- scenarios
+    var OPS = [['>', '>'], ['>=', '≥'], ['<', '<'], ['<=', '≤'], ['=', '='], ['!=', '≠']];
+    var scenarioConfig = { commAlarms: true, commDelay: 10, rules: [] };
+
+    function conditionText(c) {
+        var op = OPS.filter(function (o) { return o[0] === c.op; })[0];
+        return esc(c.tagName || c.tag) + ' ' + esc(op ? op[1] : c.op) + ' ' + esc(c.value);
+    }
+
+    function loadScenarios() {
+        SiteApi.request('GET', '/alarms/scenarios').then(function (r) {
+            scenarioConfig = r.data;
+            document.getElementById('s-comm').checked = !!r.data.commAlarms;
+            document.getElementById('s-commdelay').value = r.data.commDelay;
+            document.getElementById('s-rows').innerHTML = r.data.rules.map(function (rule, i) {
+                return '<tr><td><input type="checkbox" data-on="' + i + '"' + (rule.enabled ? ' checked' : '') + '></td><td>' + esc(rule.name) + '</td><td>' + badge(rule.level) + '</td>' +
+                    '<td>' + rule.conditions.map(conditionText).join(rule.logic === 'or' ? ' <b>OU</b> ' : ' <b>ET</b> ') + '</td><td>' + esc(rule.delay) + ' s</td>' +
+                    '<td>' + esc(rule.text) + '</td><td><button data-sedit="' + i + '">Modifier</button> <button data-sdel="' + i + '">Supprimer</button></td></tr>';
+            }).join('') || '<tr><td colspan="7" class="empty">Aucun scénario.</td></tr>';
+        }).catch(function (err) { status('s-status', err.message, true); });
+    }
+
+    /** the rules as the API expects them (tag ids) */
+    function rulesToSave() {
+        return scenarioConfig.rules.map(function (r) {
+            return { id: r.id, name: r.name, level: r.level, logic: r.logic, delay: r.delay, text: r.text, group: r.group, ackmode: r.ackmode, enabled: r.enabled,
+                conditions: r.conditions.map(function (c) { return { tag: c.tag, op: c.op, value: c.value }; }) };
+        });
+    }
+
+    function saveRules(rules, message) {
+        return SiteApi.request('PUT', '/alarms/scenarios', { rules: rules }).then(function () {
+            status('s-status', message);
+            document.getElementById('s-form').innerHTML = '';
+            loadScenarios();
+        });
+    }
+
+    function tagOptions(selected) {
+        var byDevice = {};
+        tags.forEach(function (t) { (byDevice[t.device || 'Sans équipement'] = byDevice[t.device || 'Sans équipement'] || []).push(t); });
+        return '<option value="">(choisir un tag)</option>' + Object.keys(byDevice).map(function (d) {
+            return '<optgroup label="' + esc(d) + '">' + byDevice[d].map(function (t) {
+                return '<option value="' + esc(t.id) + '"' + (t.id === selected ? ' selected' : '') + '>' + esc(t.name) + '</option>';
+            }).join('') + '</optgroup>';
+        }).join('');
+    }
+
+    function conditionRow(c) {
+        return '<div class="sc-cond"><select class="c-tag">' + tagOptions(c.tag) + '</select><select class="c-op">' + options(OPS, c.op || '>') + '</select>' +
+            '<input class="c-value" type="number" step="any" style="width:90px" value="' + esc(c.value === undefined ? '' : c.value) + '"> <button class="c-del" title="Retirer la condition">✕</button></div>';
+    }
+
+    function editScenario(index) {
+        var r = index === null ? { name: '', level: 'high', logic: 'and', delay: 5, text: '', group: '', ackmode: 'ackactive', enabled: true, conditions: [{}] } : scenarioConfig.rules[index];
+        var form = document.getElementById('s-form');
+        form.innerHTML = '<div class="graph-card"><h3>' + (index === null ? 'Nouveau scénario' : 'Modifier « ' + esc(r.name) + ' »') + '</h3>' +
+            '<div class="period"><label>Nom <input id="se-name" size="30" value="' + esc(r.name) + '"></label>' +
+            '<label>Priorité <select id="se-level">' + options(LEVELS, r.level) + '</select></label>' +
+            '<label>Délai <input id="se-delay" type="number" min="0" style="width:70px" value="' + esc(r.delay) + '"> s</label>' +
+            '<label>Acquittement <select id="se-ack">' + options([['ackactive', 'obligatoire'], ['float', 'sans acquittement']], r.ackmode) + '</select></label></div>' +
+            '<div class="period"><label>Message <input id="se-text" size="50" value="' + esc(r.text) + '"></label><label>Groupe <input id="se-group" size="15" value="' + esc(r.group) + '"></label></div>' +
+            '<div class="period"><label>Conditions <select id="se-logic">' + options([['and', 'toutes vraies (ET)'], ['or', 'une seule vraie (OU)']], r.logic) + '</select></label></div>' +
+            '<div id="se-conds">' + r.conditions.map(conditionRow).join('') + '</div>' +
+            '<div class="period"><button id="se-add">+ Condition</button></div>' +
+            '<div class="period"><button id="se-save" class="primary">Enregistrer</button><button id="se-cancel">Annuler</button><span id="se-status" class="status"></span></div></div>';
+        var conds = document.getElementById('se-conds');
+        document.getElementById('se-add').addEventListener('click', function () { conds.insertAdjacentHTML('beforeend', conditionRow({})); });
+        conds.addEventListener('click', function (e) {
+            if (e.target.className === 'c-del' && conds.children.length > 1) { e.target.parentNode.remove(); }
+        });
+        document.getElementById('se-cancel').addEventListener('click', function () { form.innerHTML = ''; });
+        document.getElementById('se-save').addEventListener('click', function () {
+            var rule = {
+                id: r.id, enabled: r.enabled, name: document.getElementById('se-name').value.trim(), level: document.getElementById('se-level').value,
+                delay: Number(document.getElementById('se-delay').value), ackmode: document.getElementById('se-ack').value,
+                text: document.getElementById('se-text').value.trim(), group: document.getElementById('se-group').value.trim(), logic: document.getElementById('se-logic').value,
+                conditions: Array.prototype.map.call(conds.children, function (row) {
+                    return { tag: row.querySelector('.c-tag').value, op: row.querySelector('.c-op').value, value: row.querySelector('.c-value').value };
+                })
+            };
+            if (!rule.name) { status('se-status', 'Écrire le nom du scénario.', true); return; }
+            var rules = rulesToSave();
+            if (index === null) { rules.push(rule); } else { rules[index] = rule; }
+            saveRules(rules, 'Scénario « ' + rule.name + ' » enregistré.').catch(function (err) { status('se-status', err.message, true); });
+        });
+        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    document.getElementById('s-new').addEventListener('click', function () { editScenario(null); });
+    document.getElementById('s-preset').addEventListener('click', function () {
+        SiteApi.request('POST', '/alarms/scenarios/preset').then(function (r) {
+            status('s-status', (r.meta && r.meta.added !== undefined ? r.meta.added + ' scénario(s) ajouté(s).' : 'Scénarios type ajoutés.'));
+            loadScenarios();
+        }).catch(function (err) { status('s-status', err.message, true); });
+    });
+    document.getElementById('s-commsave').addEventListener('click', function () {
+        SiteApi.request('PUT', '/alarms/scenarios', { commAlarms: document.getElementById('s-comm').checked, commDelay: Number(document.getElementById('s-commdelay').value) }).then(function () {
+            status('s-status', 'Alarmes de communication enregistrées.');
+        }).catch(function (err) { status('s-status', err.message, true); });
+    });
+    document.getElementById('s-rows').addEventListener('click', function (e) {
+        var edit = e.target.getAttribute('data-sedit'), del = e.target.getAttribute('data-sdel'), on = e.target.getAttribute('data-on');
+        var rules = rulesToSave();
+        if (edit !== null) { editScenario(Number(edit)); }
+        if (del !== null) {
+            if (!confirm('Supprimer le scénario « ' + rules[Number(del)].name + ' » ?')) { return; }
+            var name = rules[Number(del)].name;
+            rules.splice(Number(del), 1);
+            saveRules(rules, 'Scénario « ' + name + ' » supprimé.').catch(function (err) { status('s-status', err.message, true); });
+        }
+        if (on !== null) {
+            rules[Number(on)].enabled = e.target.checked;
+            saveRules(rules, 'Scénario « ' + rules[Number(on)].name + ' » ' + (e.target.checked ? 'activé.' : 'désactivé.')).catch(function (err) { status('s-status', err.message, true); });
+        }
+    });
+
+    // ---------------------------------------------------------------- statistics
+    function totalDuration(ms) {
+        return duration({ ontime: 1, offtime: 1 + ms });
+    }
+
+    function bars(list, key) {
+        var max = Math.max.apply(null, list.map(function (x) { return x.count; }).concat([1]));
+        return list.map(function (x) {
+            return '<div class="hbar"><span>' + esc(x[key]) + '</span><i style="width:' + Math.round(x.count / max * 260) + 'px"></i><b>' + x.count + '</b></div>';
+        }).join('') || '<p class="empty">Aucune alarme.</p>';
+    }
+
+    var statsToken = null;
+    function loadStats() {
+        var f = periodOf(filters());
+        if (f.type === 'none') { status('st-status', 'Aucune priorité cochée.', true); return; }
+        status('st-status', 'Chargement...');
+        var token = statsToken = {};
+        SiteApi.request('GET', '/alarms/stats', undefined, f).then(function (r) {
+            if (token !== statsToken) { return; }
+            var d = r.data;
+            var card = function (title, v, cls) { return '<div class="card">' + title + '<b class="' + (cls || '') + '">' + v + '</b></div>'; };
+            document.getElementById('st-cards').innerHTML = card('Alarmes sur la période', d.total) +
+                LEVELS.map(function (l) { return card(l[1], d.byLevel[l[0]] || 0, l[0] === 'highhigh' && d.byLevel.highhigh ? 'bad' : ''); }).join('') +
+                Object.keys(d.bySource).map(function (k) { return card('Source : ' + k, d.bySource[k]); }).join('');
+            document.getElementById('st-devices').innerHTML = bars(d.byDevice, 'device');
+            document.getElementById('st-days').innerHTML = bars(d.byDay.map(function (x) { return { day: x.day.split('-').reverse().join('/'), count: x.count }; }), 'day');
+            document.getElementById('st-rows').innerHTML = d.top.map(function (a) {
+                return '<tr><td>' + badge(a.type) + '</td><td>' + esc(a.text) + '</td><td>' + esc(a.sourceText) + '</td><td>' + esc(a.tag) + '</td><td>' + esc(a.device) + '</td>' +
+                    '<td><b>' + a.count + '</b></td><td>' + totalDuration(a.duration) + '</td><td>' + a.acknowledged + ' / ' + a.count + '</td><td>' + date(a.last) + '</td></tr>';
+            }).join('') || '<tr><td colspan="9" class="empty">Aucune alarme sur cette période.</td></tr>';
+            status('st-status', d.total + ' alarme(s) du ' + date(f.from) + ' au ' + date(f.to));
+        }).catch(function (err) { status('st-status', err.message, true); });
+    }
+
     // ---------------------------------------------------------------- tabs
     function showTab(name) {
         tab = name;
         document.querySelectorAll('.tabs button').forEach(function (b) { b.className = b.getAttribute('data-tab') === name ? 'on' : ''; });
-        ['active', 'history', 'config'].forEach(function (t) { document.getElementById('tab-' + t).style.display = t === name ? '' : 'none'; });
-        document.getElementById('a-filters').style.display = name === 'config' ? 'none' : '';
-        document.getElementById('f-period').style.display = name === 'history' ? '' : 'none';
+        ['active', 'history', 'config', 'scenarios', 'stats'].forEach(function (t) { document.getElementById('tab-' + t).style.display = t === name ? '' : 'none'; });
+        document.getElementById('a-filters').style.display = name === 'config' || name === 'scenarios' ? 'none' : '';
+        document.getElementById('f-period').style.display = name === 'history' || name === 'stats' ? '' : 'none';
         clearInterval(timer);
         // the active alarms (and the counts at the top) are refreshed every 5 s in all the tabs
         loadActive();
@@ -321,17 +506,24 @@
             loadHistory();
         } else if (name === 'config') {
             loadConfig();
+        } else if (name === 'scenarios') {
+            loadScenarios();
+        } else if (name === 'stats') {
+            loadStats();
         }
     }
     document.querySelectorAll('.tabs button').forEach(function (b) {
         b.addEventListener('click', function () { showTab(b.getAttribute('data-tab')); });
     });
 
+    var HASH_TAB = { '#historique': 'history', '#seuils': 'config', '#scenarios': 'scenarios', '#statistiques': 'stats' };
+    window.addEventListener('hashchange', function () { showTab(HASH_TAB[location.hash] || 'active'); });
+
     setPeriod(24);
     SiteApi.info().then(function (info) {
         tags = info.tags;
         devices = info.devices || [];
         fillFilters();
-        showTab(location.hash === '#historique' ? 'history' : location.hash === '#seuils' ? 'config' : 'active');
+        showTab(location.hash === '#historique' ? 'history' : location.hash === '#seuils' ? 'config' : location.hash === '#scenarios' ? 'scenarios' : location.hash === '#statistiques' ? 'stats' : 'active');
     }).catch(function (err) { status('a-status', err.message, true); });
 })();

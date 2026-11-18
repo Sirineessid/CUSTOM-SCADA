@@ -72,6 +72,8 @@ function init(app, server, _settings, _logger) {
         request: (name, method, apiPath) => sites[name] && sites[name].running ? requestSite(sites[name], method, apiPath) : Promise.reject(new Error('site arrêté'))
     }, settings, logger);
     app.use(accountsHttp.gate);
+    // email notifications of the alarms of all the sites (notifier.js)
+    require('./notifier').init(sitesDir, { names: () => Object.keys(sites).sort(), get: name => sites[name] || null, request: requestSite }, logger);
     app.use(accountsHttp.pages);
     app.use('/api/v1', accountsHttp.router);
     // API v1: management of the sites and access to the data of each site (api-v1-hub.js)
