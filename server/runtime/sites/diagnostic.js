@@ -189,5 +189,7 @@ module.exports = {
     init,
     report,
     journal,
+    /** event of another module (simulator...) in the journal */
+    add: event => { if (file) { add(event); } },
     STATUS_TEXT
 };

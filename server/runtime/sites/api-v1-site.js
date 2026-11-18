@@ -447,6 +447,125 @@ function router(runtime, settings, siteId) {
         send(res, events, meta({ from, to, count: events.length }));
     }));
 
+    // ---------------------------------------------------------------- simulator
+    const simulator = require('./simulator');
+
+    app.get('/simulator', h((req, res) => {
+        send(res, { status: simulator.status(), config: simulator.getConfig(), types: simulator.types(), postgres: simulator.sink().getConfig() }, meta({ time: Date.now() }));
+    }));
+
+    app.put('/simulator/equipments', h(async (req, res) => {
+        const input = body(req);
+        if (!Array.isArray(input.equipments)) {
+            throw badRequest('Champ equipments attendu : liste des équipements simulés.', { field: 'equipments' });
+        }
+        send(res, await simulator.setEquipments(input.equipments), meta());
+    }));
+
+    /** demo pumping station (2 pumps, a tank, a valve, a pressure sensor); ?replace=true replaces the equipments */
+    app.post('/simulator/preset', h(async (req, res) => {
+        if (simulator.getConfig().equipments.length && req.query.replace !== 'true') {
+            throw new ApiError(409, 'simulator_not_empty', 'Le simulateur a déjà des équipements (replace=true pour les remplacer).');
+        }
+        send(res, await simulator.setEquipments(simulator.preset()), meta(), 201);
+    }));
+
+    app.post('/simulator/start', h(async (req, res) => {
+        if (!simulator.getConfig().equipments.length) {
+            throw new ApiError(409, 'simulator_empty', 'Aucun équipement simulé : en créer d’abord (ou station de pompage type).');
+        }
+        await simulator.start();
+        send(res, simulator.status(), meta());
+    }));
+
+    app.post('/simulator/stop', h(async (req, res) => {
+        await simulator.stop();
+        send(res, simulator.status(), meta());
+    }));
+
+    app.post('/simulator/faults', h((req, res) => {
+        const input = body(req);
+        send(res, simulator.setFault(String(input.equipment || ''), String(input.fault || ''), input.duration), meta(), 201);
+    }));
+
+    app.delete('/simulator/faults/:equipment/:fault', h((req, res) => {
+        if (!simulator.clearFault(req.params.equipment, req.params.fault)) {
+            throw notFound('fault_not_found', `Défaut simulé inconnu : ${req.params.equipment} ${req.params.fault}`);
+        }
+        send(res, { equipment: req.params.equipment, fault: req.params.fault, cleared: true }, meta());
+    }));
+
+    /** command of a simulated equipment (pump on / off, automatic mode, valve setpoint) */
+    app.post('/simulator/write', h((req, res) => {
+        const input = body(req);
+        send(res, { equipment: input.equipment, variable: input.variable, value: simulator.writeVariable(String(input.equipment || ''), String(input.variable || ''), input.value) }, meta());
+    }));
+
+    app.post('/simulator/communication-loss', h(async (req, res) => {
+        const input = req.body && typeof req.body === 'object' ? req.body : {};
+        send(res, await simulator.communicationLoss(input.duration), meta());
+    }));
+
+    app.delete('/simulator/communication-loss', h(async (req, res) => {
+        await simulator.endCommunicationLoss();
+        send(res, simulator.status(), meta());
+    }));
+
+    /**
+     * alarms of test on the simulated tags: levels of the tanks, faults of the pumps and valves,
+     * sensors out of range (alarms existing with the same name are replaced)
+     */
+    app.post('/simulator/alarms', h(async (req, res) => {
+        const prj = await project();
+        const all = api.allTags(prj);
+        const created = [];
+        const off = { enabled: false };
+        const save = async (name, tagId, levels) => {
+            if (!all.some(t => t.id === tagId)) {
+                return;
+            }
+            const old = (prj.alarms || []).find(a => a.name === name) || {};
+            const alarm = { name, property: Object.assign({}, old.property, { variableId: tagId }), actions: old.actions || { enabled: false, values: [] } };
+            LEVELS.forEach(level => { alarm[level] = alarmLevel(level, levels[level] || off, old[level]); });
+            await runtime.project.setProjectData('set-alarm', alarm);
+            await runtime.update('set-alarm', alarm);
+            created.push(name);
+        };
+        for (const e of simulator.getConfig().equipments) {
+            const tag = v => `sim_${e.id}_${v}`.toLowerCase();
+            if (e.type === 'reservoir') {
+                await save(`SIM ${e.name} niveau`, tag('Niveau'), {
+                    high: { enabled: true, condition: 'above', value: e.params.seuilHaut, text: `${e.name} : niveau haut`, delay: 2 },
+                    low: { enabled: true, condition: 'below', value: e.params.seuilBas, text: `${e.name} : niveau bas`, delay: 2 }
+                });
+            } else if (e.type === 'pompe' || e.type === 'vanne') {
+                await save(`SIM ${e.name} défaut`, tag('Defaut'), {
+                    highhigh: { enabled: true, condition: 'between', min: 1, max: 1, text: `${e.name} : défaut`, delay: 1 }
+                });
+            } else if (e.type === 'capteur') {
+                await save(`SIM ${e.name} hors plage`, tag('Valeur'), {
+                    high: { enabled: true, condition: 'above', value: e.params.max, text: `${e.name} : mesure hors plage`, delay: 2 }
+                });
+            }
+        }
+        send(res, created, meta({ count: created.length }), 201);
+    }));
+
+    app.get('/simulator/postgres', h((req, res) => {
+        send(res, simulator.sink().getConfig(), meta());
+    }));
+
+    app.put('/simulator/postgres', h((req, res) => {
+        send(res, simulator.sink().setConfig(Object.assign({}, body(req), { restart: simulator.status().running })), meta());
+    }));
+
+    app.post('/simulator/postgres/test', h(async (req, res) => {
+        const result = await simulator.sink().test(body(req)).catch(err => {
+            throw new ApiError(err.status || 400, err.code || 'connection_failed', err.status ? err.message : `Connexion impossible : ${err.message}`);
+        });
+        send(res, result, meta());
+    }));
+
     // ---------------------------------------------------------------- versions
     const versions = require('./versions');
     const findVersion = async id => {

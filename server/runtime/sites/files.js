@@ -39,6 +39,8 @@ function init(_runtime, settings, _logger, _siteName) {
     require('./versions').init(runtime, settings, logger);
     // diagnostic: state of the connections, errors of communication (diagnostic.js)
     require('./diagnostic').init(runtime, settings, logger);
+    // integrated simulator (simulator.js): restarted if it was running
+    require('./simulator').init(runtime, settings, logger);
     // the project is saved by setProject (import, new site) or setProjectData (editor)
     ['setProject', 'setProjectData'].forEach(fnc => {
         const original = runtime.project[fnc];
@@ -136,6 +138,10 @@ async function writeFiles() {
     fs.writeFileSync(path.join(siteDir, 'versions.html'), versionsHtml());
     // diagnostic of the communication of the site
     fs.copyFileSync(path.join(__dirname, 'diagnostic.client.js'), path.join(siteDir, 'diagnostic.js'));
+    // integrated simulator of equipments
+    fs.copyFileSync(path.join(__dirname, 'simulator.client.js'), path.join(siteDir, 'simulateur.js'));
+    fs.writeFileSync(path.join(siteDir, 'simulateur.html'), simulatorHtml());
+    files.push({ file: 'simulateur.html', page: 'Simulateur', viewId: null }, { file: 'simulateur.js', page: 'Simulateur (script)', viewId: null });
     fs.writeFileSync(path.join(siteDir, 'diagnostic.html'), diagnosticHtml());
     files.push({ file: 'diagnostic.html', page: 'Diagnostic', viewId: null }, { file: 'diagnostic.js', page: 'Diagnostic (script)', viewId: null });
     files.push({ file: 'versions.html', page: 'Versions', viewId: null }, { file: 'versions.js', page: 'Versions (script)', viewId: null });
@@ -481,6 +487,22 @@ function apiHtml() {
     ])}
 </section>
 <section>
+  <h2>Simulateur</h2>
+  ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
+        row('GET', `${base}/simulator`, '', 'état (en marche, serveur OPC UA, perte de communication), équipements avec valeurs et défauts, types, configuration PostgreSQL'),
+        row('PUT', `${base}/simulator/equipments`, '{ "equipments": [ { "id": "P1", "type": "pompe | vanne | reservoir | capteur", "name", "params": { ... } } ] }', 'équipements enregistrés, connexion « Simulateur » et tags sim_... mis à jour'),
+        row('POST', `${base}/simulator/preset`, 'replace=true pour remplacer', 'station de pompage type : 2 pompes, réservoir, vanne, capteur de pression'),
+        row('POST', `${base}/simulator/start | stop`, '', 'simulation démarrée / arrêtée (les connexions réelles ne changent pas)'),
+        row('POST', `${base}/simulator/write`, '{ "equipment": "P1", "variable": "Marche", "value": 1 }', 'commande d’un équipement simulé'),
+        row('POST', `${base}/simulator/faults`, '{ "equipment", "fault": "defaut | debit_nul | surconsommation | bloquee | fuite | bloque | hors_plage", "duration": s }', 'défaut simulé (201)'),
+        row('DELETE', `${base}/simulator/faults/{equipment}/{fault}`, '', 'défaut supprimé'),
+        row('POST / DELETE', `${base}/simulator/communication-loss`, '{ "duration": 30 } (POST)', 'perte de communication simulée / rétablie'),
+        row('POST', `${base}/simulator/alarms`, '', 'alarmes de test sur les tags simulés'),
+        row('GET / PUT', `${base}/simulator/postgres`, '{ "enabled", "host", "port", "database", "user", "password", "table", "interval" }', 'enregistrement des valeurs simulées dans PostgreSQL'),
+        row('POST', `${base}/simulator/postgres/test`, 'paramètres PostgreSQL', 'test de connexion, table créée si absente')
+    ])}
+</section>
+<section>
   <h2>Diagnostic</h2>
   ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
         row('GET', '/api/v1/diagnostic', '', 'communication de tous les sites : état (ok, warning, error, stopped), équipements connectés, dernière donnée, tags sans mise à jour, erreurs'),
@@ -570,6 +592,19 @@ function apiHtml() {
 
 /** versions.html: versions of the site and full backups of its folder (versions.js, API v1) */
 /** diagnostic.html: communication of the sites, equipments, tags without update, errors (diagnostic.js, API v1) */
+/** simulateur.html: integrated simulator of equipments (simulator.js, simulateur.js, API v1) */
+function simulatorHtml() {
+    return document(`Simulateur - ${siteName}`, `${navBar('simulateur.html')}
+<header>
+  <h1>Simulateur <small>${esc(siteName)}</small></h1>
+  <p class="info">Environnement de simulation intégré : équipements virtuels (pompes, vannes, réservoirs, capteurs), défauts, pertes de communication
+     et alarmes de test, pour tester le site sans automate réel. Actualisé toutes les 2 secondes.</p>
+</header>
+<div id="simulator-app" data-site="${esc(siteName)}"></div>
+<script src="site-api.js"></script>
+<script src="simulateur.js"></script>`);
+}
+
 function diagnosticHtml() {
     return document(`Diagnostic - ${siteName}`, `${navBar('diagnostic.html')}
 <header>
@@ -740,7 +775,7 @@ function navBar(current) {
     return `<nav class="sitenav" id="sitenav" data-site="${esc(siteName)}" data-file="${esc(current)}">
   <a href="${base}/home" class="back" onclick="if (history.length > 1 && document.referrer) { history.back(); return false; }">&#8592; Retour</a>
   ${link(`${base}/home`, '▶ Exploitation', false, 'Mode exploitation : supervision du site (dernière page consultée)')}
-  <span class="sep"></span>${pages}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
+  <span class="sep"></span>${pages}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('simulateur.html', 'Simulateur', current === 'simulateur.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
   <span class="sep"></span>${link(`${base}/editor`, '✎ Édition', false, 'Mode édition : éditeur FUXA du site')}
   <span style="flex:1"></span>
   <label class="site-switch" title="Passer à un autre site (sur sa dernière page consultée)">Site <select id="site-switch"><option>${esc(siteName)}</option></select></label>
@@ -827,6 +862,8 @@ function document(title, body) {
   .diag-cards .card { background: #fff; border: 1px solid #cfd8dc; border-radius: 6px; padding: 10px 14px; min-width: 170px; font-size: 13px; color: #546e7a; }
   .diag-cards .card b { display: block; font-size: 22px; color: #1f3864; margin-top: 4px; } .diag-cards .card small { display: block; }
   .bad { color: #c62828 !important; font-weight: bold; }
+  .graph-card.card-fault { border-color: #e57373; box-shadow: 0 0 0 2px #ffcdd2; }
+  button.fault-on { background: #c62828; color: #fff; border: none; border-radius: 3px; }
   .sets-bar { background: #e8eef7; border-radius: 6px; padding: 6px 10px; }
   .picker-back { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 50; display: flex; align-items: center; justify-content: center; }
   .picker { background: #fff; border-radius: 8px; padding: 12px 16px; width: min(1000px, 94vw); max-height: 88vh; display: flex; flex-direction: column; box-shadow: 0 6px 24px rgba(0,0,0,0.3); }
