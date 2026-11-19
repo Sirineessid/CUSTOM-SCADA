@@ -43,6 +43,7 @@ function init(_runtime, settings, _logger, _siteName) {
     require('./simulator').init(runtime, settings, logger);
     // alarms by scenario and alarms of communication (scenarios.js)
     require('./scenarios').init(runtime, settings, logger);
+    require('./commands').init(runtime, settings, logger, require('./audit'));
     // the project is saved by setProject (import, new site) or setProjectData (editor)
     ['setProject', 'setProjectData'].forEach(fnc => {
         const original = runtime.project[fnc];
@@ -144,6 +145,10 @@ async function writeFiles() {
     fs.copyFileSync(path.join(__dirname, 'simulator.client.js'), path.join(siteDir, 'simulateur.js'));
     fs.writeFileSync(path.join(siteDir, 'simulateur.html'), simulatorHtml());
     files.push({ file: 'simulateur.html', page: 'Simulateur', viewId: null }, { file: 'simulateur.js', page: 'Simulateur (script)', viewId: null });
+    // remote commands (commands.js, commandes.js)
+    fs.copyFileSync(path.join(__dirname, 'commands.client.js'), path.join(siteDir, 'commandes.js'));
+    fs.writeFileSync(path.join(siteDir, 'commandes.html'), commandsHtml());
+    files.push({ file: 'commandes.html', page: 'Commandes', viewId: null }, { file: 'commandes.js', page: 'Commandes (script)', viewId: null });
     fs.writeFileSync(path.join(siteDir, 'diagnostic.html'), diagnosticHtml());
     files.push({ file: 'diagnostic.html', page: 'Diagnostic', viewId: null }, { file: 'diagnostic.js', page: 'Diagnostic (script)', viewId: null });
     files.push({ file: 'versions.html', page: 'Versions', viewId: null }, { file: 'versions.js', page: 'Versions (script)', viewId: null });
@@ -594,6 +599,20 @@ function apiHtml() {
 
 /** versions.html: versions of the site and full backups of its folder (versions.js, API v1) */
 /** diagnostic.html: communication of the sites, equipments, tags without update, errors (diagnostic.js, API v1) */
+/** commandes.html: remote commands of the equipments (commands.js, commandes.js, API v1) */
+function commandsHtml() {
+    return document(`Commandes - ${siteName}`, `${navBar('commandes.html')}
+<header>
+  <h1>Commandes <small>${esc(siteName)}</small></h1>
+  <p class="info">Commandes à distance des équipements : marche / arrêt, modes automatique / manuel et consignes. Chaque commande vérifie vos droits,
+     les verrouillages et la connexion de l’équipement, puis attend le retour d’état de l’automate. Les protections locales de l’automate restent prioritaires :
+     une commande SCADA ne les contourne jamais.</p>
+</header>
+<div id="commands-app"></div>
+<script src="site-api.js"></script>
+<script src="commandes.js"></script>`);
+}
+
 /** simulateur.html: integrated simulator of equipments (simulator.js, simulateur.js, API v1) */
 function simulatorHtml() {
     return document(`Simulateur - ${siteName}`, `${navBar('simulateur.html')}
@@ -777,7 +796,7 @@ function navBar(current) {
     return `<nav class="sitenav" id="sitenav" data-site="${esc(siteName)}" data-file="${esc(current)}">
   <a href="${base}/home" class="back" onclick="if (history.length > 1 && document.referrer) { history.back(); return false; }">&#8592; Retour</a>
   ${link(`${base}/home`, '▶ Exploitation', false, 'Mode exploitation : supervision du site (dernière page consultée)')}
-  <span class="sep"></span>${pages}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('simulateur.html', 'Simulateur', current === 'simulateur.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
+  <span class="sep"></span>${pages}${link('commandes.html', 'Commandes', current === 'commandes.html')}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('simulateur.html', 'Simulateur', current === 'simulateur.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
   <span class="sep"></span>${link(`${base}/editor`, '✎ Édition', false, 'Mode édition : éditeur FUXA du site')}
   <span style="flex:1"></span>
   ${link('/alarmes', 'Alarmes des sites', false, 'Alarmes, statistiques et notifications de tous les sites')}
@@ -876,6 +895,13 @@ function document(title, body) {
   .tabs { display: flex; gap: 4px; border-bottom: 2px solid #1f3864; margin: 12px 0 6px; }
   .tabs button { border: 1px solid #cfd8dc; border-bottom: none; background: #eceff1; border-radius: 6px 6px 0 0; padding: 7px 16px; }
   .tabs button.on { background: #1f3864; color: #fff; border-color: #1f3864; }
+  .cmd-grid { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0; }
+  .cmd-card { background: #fff; border: 1px solid #cfd8dc; border-radius: 6px; padding: 10px 14px; width: 330px; font-size: 13px; }
+  .cmd-card h3 { margin: 0 0 4px; font-size: 15px; } .cmd-card .eq { color: #78909c; font-size: 12px; }
+  .cmd-card .state { margin: 6px 0; } .cmd-card .state b { font-size: 16px; color: #1f3864; }
+  .cmd-card .btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; } .cmd-card .btns button { flex: 1; padding: 7px; }
+  .cmd-card.locked { border-color: #ffb74d; } .cmd-card.off { opacity: 0.6; }
+  .lock { color: #e65100; font-size: 12px; margin: 2px 0; } .wait { color: #0d47a1; font-weight: bold; }
   .hbar { display: flex; align-items: center; gap: 8px; margin: 3px 0; font-size: 13px; } .hbar span:first-child { min-width: 160px; }
   .hbar i { display: inline-block; height: 14px; background: #1f3864; border-radius: 3px; min-width: 2px; }
   .sc-cond { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }

@@ -93,6 +93,9 @@ function create(manager, settings, logger) {
             }
             return { site, role: 'consultation' };
         }
+        if (/^commands\/(config|preset)$/.test(service)) {
+            return { site, role: 'ingenieur' };
+        }
         if (/^alarms\/(ack|[^/]+\/ack)$/.test(service) || /^commands(\/|$)/.test(service)) {
             return { site, role: 'operateur' };
         }

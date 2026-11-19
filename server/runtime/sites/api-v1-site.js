@@ -490,6 +490,50 @@ function router(runtime, settings, siteId) {
         send(res, events, meta({ from, to, count: events.length }));
     }));
 
+    // ---------------------------------------------------------------- remote commands (commands.js)
+    const commands = require('./commands');
+
+    app.get('/commands', h((req, res) => {
+        const items = commands.list(req.scadaUser || null);
+        send(res, items, meta({ count: items.length, time: Date.now(), user: req.scadaUser ? req.scadaUser.username : null }));
+    }));
+
+    app.get('/commands/config', h((req, res) => {
+        send(res, commands.getConfig(), meta({ types: commands.TYPES }));
+    }));
+
+    app.put('/commands/config', h((req, res) => {
+        send(res, commands.setConfig(body(req)), meta());
+    }));
+
+    /** commands of a pumping station (tags of the simulator), added to the existing ones (same name: not added) */
+    app.post('/commands/preset', h((req, res) => {
+        const current = commands.getConfig().commands;
+        const added = commands.preset().filter(c => !current.some(x => x.name === c.name));
+        send(res, commands.setConfig({ commands: current.concat(added) }), meta({ added: added.length }), 201);
+    }));
+
+    app.get('/commands/history', h((req, res) => {
+        const { from, to } = period(req.query, 7 * 24 * 3600 * 1000, MAX_HISTORY);
+        const items = commands.history({ from, to, status: req.query.status, command: req.query.command, user: req.query.user, equipment: req.query.equipment });
+        const count = s => items.filter(r => r.status === s).length;
+        send(res, items.slice(0, 5000), meta({ from, to, count: items.length,
+            counts: { executed: count('exécutée'), sent: count('envoyée'), refused: count('refusée'), expired: count('expirée'), failed: count('échec'), running: count('en cours') } }));
+    }));
+
+    app.get('/commands/executions/:exec_id', h((req, res) => {
+        const record = commands.get(req.params.exec_id);
+        if (!record) {
+            throw notFound('execution_not_found', `Exécution « ${req.params.exec_id} » inconnue.`);
+        }
+        send(res, record, meta());
+    }));
+
+    app.post('/commands/:command_id/execute', h(async (req, res) => {
+        const record = await commands.execute(req.params.command_id, body(req), req.scadaUser || null);
+        send(res, record, meta(), record.status === 'en cours' ? 202 : 200);
+    }));
+
     // ---------------------------------------------------------------- simulator
     const simulator = require('./simulator');
 

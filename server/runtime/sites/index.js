@@ -679,10 +679,10 @@ function requestSite(site, method, apiPath, body) {
  * headers forwarded to a site: the user header of the browser is removed, the user checked by the gate
  * (accounts-http.js) is added, signed for the site
  */
-function withUser(headers, user, siteName) {
+function withUser(headers, user, siteName, session) {
     delete headers[accounts.USER_HEADER];
     if (user && accounts.enabled()) {
-        headers[accounts.USER_HEADER] = accounts.userHeader(user, siteName);
+        headers[accounts.USER_HEADER] = accounts.userHeader(user, siteName, session);
     }
     return headers;
 }
@@ -694,7 +694,7 @@ function forward(site, req, res) {
     }
     const proxy = http.request({
         host: '127.0.0.1', port: site.port, method: req.method, path: req.originalUrl || req.url,
-        headers: withUser(Object.assign({}, req.headers, { 'x-forwarded-for': req.socket.remoteAddress }), req.scadaUser, site.name)
+        headers: withUser(Object.assign({}, req.headers, { 'x-forwarded-for': req.socket.remoteAddress }), req.scadaUser, site.name, req.scadaSession)
     }, proxyRes => {
         res.writeHead(proxyRes.statusCode, proxyRes.headers);
         proxyRes.pipe(res);

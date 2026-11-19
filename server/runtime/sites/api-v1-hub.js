@@ -69,6 +69,9 @@ function router(manager, settings, logger) {
                 alarms: ['GET /api/v1/sites/{site_id}/alarms', 'GET /api/v1/sites/{site_id}/alarms/history',
                     'POST /api/v1/sites/{site_id}/alarms/{alarm_id}/ack', 'POST /api/v1/sites/{site_id}/alarms/ack',
                     'GET /api/v1/sites/{site_id}/alarms/config', 'PUT|DELETE /api/v1/sites/{site_id}/alarms/config/{name}'],
+                commands: ['GET /api/v1/sites/{site_id}/commands', 'POST /api/v1/sites/{site_id}/commands/{command_id}/execute { value, confirmed }',
+                    'GET /api/v1/sites/{site_id}/commands/executions/{exec_id}', 'GET /api/v1/sites/{site_id}/commands/history?from=&to=&status=&command=&user=',
+                    'GET|PUT /api/v1/sites/{site_id}/commands/config', 'POST /api/v1/sites/{site_id}/commands/preset'],
                 alarmsAllSites: ['GET /api/v1/alarms?site=', 'GET /api/v1/alarms/history?site=&from=&to=', 'GET /api/v1/alarms/stats?site=&from=&to='],
                 notifications: ['GET|PUT /api/v1/notifications', 'POST /api/v1/notifications/test { to }', 'GET /api/v1/notifications/history'],
                 diagnostic: ['GET /api/v1/diagnostic', 'GET /api/v1/sites/{site_id}/diagnostic', 'GET /api/v1/sites/{site_id}/diagnostic/tags',
@@ -313,7 +316,7 @@ function forward(site, req, res, target) {
     // user checked by the gate, signed for the site (a user header of the browser is never forwarded)
     delete headers[accounts.USER_HEADER];
     if (req.scadaUser && accounts.enabled()) {
-        headers[accounts.USER_HEADER] = accounts.userHeader(req.scadaUser, site.name);
+        headers[accounts.USER_HEADER] = accounts.userHeader(req.scadaUser, site.name, req.scadaSession);
     }
     let data = null;
     if (req._body) {

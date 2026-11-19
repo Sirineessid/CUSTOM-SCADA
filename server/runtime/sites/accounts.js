@@ -474,10 +474,12 @@ function me(user, session) {
 // ---------------------------------------------------------------- user header for the sites
 
 /** user signed for the instance of a site: { username, name, role, equipments } */
-function userHeader(user, site) {
+function userHeader(user, site, session) {
     const payload = Buffer.from(JSON.stringify({
         username: user.username, name: user.name || '', role: roleOn(user, site),
-        equipments: (user.equipments && user.equipments[site]) || [], time: Date.now()
+        equipments: (user.equipments && user.equipments[site]) || [], time: Date.now(),
+        // password typed again recently (critical commands)
+        confirmed: !!(session && session.confirmedUntil > Date.now())
     })).toString('base64url');
     const sig = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
     return `${payload}.${sig}`;
