@@ -18019,11 +18019,18 @@ let ConnectionsListComponent = class ConnectionsListComponent {
       if (event?.id && event?.status) {
         this.connectionStatuses[event.id] = {
           status: event.status,
-          last: Date.now()
+          last: Date.now(),
+          lastCommunicationAt: event.lastCommunicationAt,
+          responseTimeMs: event.responseTimeMs,
+          dataQuality: event.dataQuality
         };
       }
     });
-    (0,rxjs__WEBPACK_IMPORTED_MODULE_9__.interval)(10000).pipe((0,rxjs__WEBPACK_IMPORTED_MODULE_8__.takeUntil)(this.destroy$)).subscribe(() => this.refreshConnections());
+    (0,rxjs__WEBPACK_IMPORTED_MODULE_9__.interval)(10000).pipe((0,rxjs__WEBPACK_IMPORTED_MODULE_8__.takeUntil)(this.destroy$)).subscribe(() => {
+      this.refreshConnections();
+      this.hmiService.askDeviceStatus();
+    });
+    this.hmiService.askDeviceStatus();
   }
   ngOnDestroy() {
     this.destroy$.next();
@@ -18049,6 +18056,9 @@ let ConnectionsListComponent = class ConnectionsListComponent {
       return 'connect-off';
     }
     const status = this.connectionStatuses[device.id];
+    if (status?.dataQuality === 'stale') {
+      return 'connect-error';
+    }
     if (!status) {
       return '';
     }
@@ -18069,6 +18079,15 @@ let ConnectionsListComponent = class ConnectionsListComponent {
       return '#ffc000';
     }
     return '#9e9e9e';
+  }
+  getConnectionDiagnostics(device) {
+    const diagnostics = this.connectionStatuses[device.id];
+    if (!diagnostics) {
+      return '-';
+    }
+    const lastCommunication = diagnostics.lastCommunicationAt ? new Date(diagnostics.lastCommunicationAt).toLocaleString() : '-';
+    const responseTime = diagnostics.responseTimeMs === null || diagnostics.responseTimeMs === undefined ? '-' : `${diagnostics.responseTimeMs.toFixed(1)} ms`;
+    return `${lastCommunication} · ${responseTime}`;
   }
   getConnectionAddress(device) {
     const address = device.property?.address;
@@ -85606,7 +85625,7 @@ module.exports = "<div class=\"container\">\r\n    <gridster [options]=\"gridOpt
 /***/ ((module) => {
 
 "use strict";
-module.exports = "<div class=\"connection-list\">\r\n    <div class=\"connection-list-heading\">\r\n        <mat-icon>storage</mat-icon>\r\n        <span>{{'device.list-device' | translate}} ({{connections.length}})</span>\r\n    </div>\r\n\r\n    <div *ngIf=\"connections.length === 0\" class=\"connection-list-empty\">\r\n        -\r\n    </div>\r\n\r\n    <div *ngFor=\"let device of connections\" class=\"connection-list-item\">\r\n        <div class=\"connection-list-row\">\r\n            <span class=\"connection-list-status\" [style.background-color]=\"getConnectionStatusColor(device)\"\r\n                [title]=\"getConnectionStatus(device) ? ('device.' + getConnectionStatus(device) | translate) : '-'\"></span>\r\n            <div class=\"connection-list-details\">\r\n                <span class=\"connection-list-name pointer\" (click)=\"onSelectDevice(device)\"\r\n                    matTooltip=\"{{'device.property-tags' | translate}}\">{{device.name}}</span>\r\n                <span class=\"connection-list-meta\">{{device.type}} &nbsp;|&nbsp; {{getConnectionAddress(device)}}</span>\r\n            </div>\r\n            <span class=\"connection-list-status-text\">\r\n                {{getConnectionStatus(device) ? ('device.' + getConnectionStatus(device) | translate) : '-'}}\r\n            </span>\r\n            <button *ngIf=\"!readonly\" mat-icon-button class=\"connection-list-menu-button\"\r\n                [matMenuTriggerFor]=\"connectionMenu\"\r\n                [attr.aria-label]=\"'device.property-client' | translate\"\r\n                (click)=\"$event.stopPropagation()\">\r\n                <mat-icon>more_vert</mat-icon>\r\n            </button>\r\n            <mat-menu #connectionMenu=\"matMenu\">\r\n                <button mat-menu-item (click)=\"onConfigureConnection(device)\">\r\n                    <mat-icon>settings</mat-icon>\r\n                    <span>{{'device.property-client' | translate}}</span>\r\n                </button>\r\n            </mat-menu>\r\n        </div>\r\n        <div class=\"connection-tags\">\r\n            <button mat-button class=\"connection-tags-toggle\" (click)=\"toggleConnectionTags(device, $event)\"\r\n                [attr.aria-expanded]=\"!!expandedConnections[device.id]\">\r\n                <mat-icon>{{expandedConnections[device.id] ? 'expand_less' : 'expand_more'}}</mat-icon>\r\n                <span>{{'chart.config-tags' | translate}} ({{getConnectionTags(device).length}})</span>\r\n            </button>\r\n            <div *ngIf=\"expandedConnections[device.id]\" class=\"connection-tags-list\">\r\n                <div *ngFor=\"let tag of getConnectionTags(device)\" class=\"connection-tag\">\r\n                    <span class=\"connection-tag-name\">{{tag.label || tag.name || tag.id}}</span>\r\n                    <span class=\"connection-tag-meta\">{{tag.address || tag.type || ''}}</span>\r\n                </div>\r\n                <div *ngIf=\"getConnectionTags(device).length === 0\" class=\"connection-tags-empty\">\r\n                    -\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n</div>\r\n";
+module.exports = "<div class=\"connection-list\">\r\n    <div class=\"connection-list-heading\">\r\n        <mat-icon>storage</mat-icon>\r\n        <span>{{'device.list-device' | translate}} ({{connections.length}})</span>\r\n    </div>\r\n\r\n    <div *ngIf=\"connections.length === 0\" class=\"connection-list-empty\">\r\n        -\r\n    </div>\r\n\r\n    <div *ngFor=\"let device of connections\" class=\"connection-list-item\">\r\n        <div class=\"connection-list-row\">\r\n            <span class=\"connection-list-status\" [style.background-color]=\"getConnectionStatusColor(device)\"\r\n                [title]=\"getConnectionStatus(device) ? ('device.' + getConnectionStatus(device) | translate) : '-'\"></span>\r\n            <div class=\"connection-list-details\">\r\n                <span class=\"connection-list-name pointer\" (click)=\"onSelectDevice(device)\"\r\n                    matTooltip=\"{{'device.property-tags' | translate}}\">{{device.name}}</span>\r\n                <span class=\"connection-list-meta\">{{device.type}} &nbsp;|&nbsp; {{getConnectionAddress(device)}}</span>\r\n                <span class=\"connection-list-meta\">{{getConnectionDiagnostics(device)}}</span>\r\n            </div>\r\n            <span class=\"connection-list-status-text\">\r\n                {{getConnectionStatus(device) ? ('device.' + getConnectionStatus(device) | translate) : '-'}}\r\n            </span>\r\n            <button *ngIf=\"!readonly\" mat-icon-button class=\"connection-list-menu-button\"\r\n                [matMenuTriggerFor]=\"connectionMenu\"\r\n                [attr.aria-label]=\"'device.property-client' | translate\"\r\n                (click)=\"$event.stopPropagation()\">\r\n                <mat-icon>more_vert</mat-icon>\r\n            </button>\r\n            <mat-menu #connectionMenu=\"matMenu\">\r\n                <button mat-menu-item (click)=\"onConfigureConnection(device)\">\r\n                    <mat-icon>settings</mat-icon>\r\n                    <span>{{'device.property-client' | translate}}</span>\r\n                </button>\r\n            </mat-menu>\r\n        </div>\r\n        <div class=\"connection-tags\">\r\n            <button mat-button class=\"connection-tags-toggle\" (click)=\"toggleConnectionTags(device, $event)\"\r\n                [attr.aria-expanded]=\"!!expandedConnections[device.id]\">\r\n                <mat-icon>{{expandedConnections[device.id] ? 'expand_less' : 'expand_more'}}</mat-icon>\r\n                <span>{{'chart.config-tags' | translate}} ({{getConnectionTags(device).length}})</span>\r\n            </button>\r\n            <div *ngIf=\"expandedConnections[device.id]\" class=\"connection-tags-list\">\r\n                <div *ngFor=\"let tag of getConnectionTags(device)\" class=\"connection-tag\">\r\n                    <span class=\"connection-tag-name\">{{tag.label || tag.name || tag.id}}</span>\r\n                    <span class=\"connection-tag-meta\">{{tag.address || tag.type || ''}}</span>\r\n                </div>\r\n                <div *ngIf=\"getConnectionTags(device).length === 0\" class=\"connection-tags-empty\">\r\n                    -\r\n                </div>\r\n            </div>\r\n        </div>\r\n    </div>\r\n</div>\r\n";
 
 /***/ }),
 

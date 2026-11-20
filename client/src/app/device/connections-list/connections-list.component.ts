@@ -20,7 +20,13 @@ export class ConnectionsListComponent implements OnInit, OnDestroy {
 
     connections: Device[] = [];
     expandedConnections: { [id: string]: boolean } = {};
-    private connectionStatuses: { [id: string]: { status: string; last: number } } = {};
+    private connectionStatuses: { [id: string]: {
+        status: string;
+        last: number;
+        lastCommunicationAt?: number;
+        responseTimeMs?: number;
+        dataQuality?: string;
+    } } = {};
     private destroy$ = new Subject<void>();
 
     constructor(private projectService: ProjectService,
@@ -36,12 +42,22 @@ export class ConnectionsListComponent implements OnInit, OnDestroy {
             takeUntil(this.destroy$)
         ).subscribe((event: any) => {
             if (event?.id && event?.status) {
-                this.connectionStatuses[event.id] = { status: event.status, last: Date.now() };
+                this.connectionStatuses[event.id] = {
+                    status: event.status,
+                    last: Date.now(),
+                    lastCommunicationAt: event.lastCommunicationAt,
+                    responseTimeMs: event.responseTimeMs,
+                    dataQuality: event.dataQuality
+                };
             }
         });
         interval(10000).pipe(
             takeUntil(this.destroy$)
-        ).subscribe(() => this.refreshConnections());
+        ).subscribe(() => {
+            this.refreshConnections();
+            this.hmiService.askDeviceStatus();
+        });
+        this.hmiService.askDeviceStatus();
     }
 
     ngOnDestroy() {
@@ -76,6 +92,9 @@ export class ConnectionsListComponent implements OnInit, OnDestroy {
             return 'connect-off';
         }
         const status = this.connectionStatuses[device.id];
+        if (status?.dataQuality === 'stale') {
+            return 'connect-error';
+        }
         if (!status) {
             return '';
         }
@@ -97,6 +116,20 @@ export class ConnectionsListComponent implements OnInit, OnDestroy {
             return '#ffc000';
         }
         return '#9e9e9e';
+    }
+
+    getConnectionDiagnostics(device: Device): string {
+        const diagnostics = this.connectionStatuses[device.id];
+        if (!diagnostics) {
+            return '-';
+        }
+        const lastCommunication = diagnostics.lastCommunicationAt
+            ? new Date(diagnostics.lastCommunicationAt).toLocaleString()
+            : '-';
+        const responseTime = diagnostics.responseTimeMs === null || diagnostics.responseTimeMs === undefined
+            ? '-'
+            : `${diagnostics.responseTimeMs.toFixed(1)} ms`;
+        return `${lastCommunication} · ${responseTime}`;
     }
 
     getConnectionAddress(device: Device): string {

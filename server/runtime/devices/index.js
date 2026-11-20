@@ -208,6 +208,33 @@ function getDevicesStatus() {
 }
 
 /**
+ * Return latest communication diagnostics for a device
+ */
+function getDeviceDiagnostics(deviceId) {
+    if (activeDevices[deviceId] && activeDevices[deviceId].getDiagnostics) {
+        return activeDevices[deviceId].getDiagnostics();
+    }
+    return {
+        lastCommunicationAt: null,
+        responseTimeMs: null,
+        pollingIntervalMs: null,
+        dataQuality: 'unknown'
+    };
+}
+
+function resolveDeviceId(deviceIdOrName) {
+    const devices = runtime && runtime.project && runtime.project.getDevices
+        ? runtime.project.getDevices()
+        : {};
+    for (const id in devices) {
+        if (id === deviceIdOrName || devices[id].name === deviceIdOrName) {
+            return id;
+        }
+    }
+    return deviceIdOrName;
+}
+
+/**
  * Return all devices values
  */
 function getDevicesValues() {
@@ -586,6 +613,8 @@ var devices = module.exports = {
     updateDevice: updateDevice,
     removeDevice: removeDevice,
     getDevicesStatus: getDevicesStatus,
+    getDeviceDiagnostics: getDeviceDiagnostics,
+    resolveDeviceId: resolveDeviceId,
     getDevicesValues: getDevicesValues,
     getDeviceValue: getDeviceValue,
     getTagValue: getTagValue,

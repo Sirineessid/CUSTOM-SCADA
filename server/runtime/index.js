@@ -167,7 +167,11 @@ function init(_io, _api, _settings, _log, eventsMain) {
             if (message === 'get') {
                 var adevs = devices.getDevicesStatus();
                 for (var id in adevs) {
-                    socket.emit(Events.IoEventTypes.DEVICE_STATUS, { id: id, status: adevs[id] });
+                    socket.emit(Events.IoEventTypes.DEVICE_STATUS, {
+                        id: id,
+                        status: adevs[id],
+                        ...devices.getDeviceDiagnostics(id)
+                    });
                 }
             } else {
                 logger.warn(`${Events.IoEventTypes.DEVICE_STATUS}: rejected client status update from ${socket.userId || 'guest'}`);
@@ -680,8 +684,11 @@ function subscriptionTagChange(tagid) {
  */
 function updateDeviceStatus(event) {
     try {
-        io.emit(Events.IoEventTypes.DEVICE_STATUS, event);
+        const deviceId = event && event.id ? devices.resolveDeviceId(event.id) : null;
+        const diagnostics = deviceId ? devices.getDeviceDiagnostics(deviceId) : {};
+        io.emit(Events.IoEventTypes.DEVICE_STATUS, { ...event, ...(deviceId ? { id: deviceId } : {}), ...diagnostics });
     } catch (err) {
+        logger.error('Error updating device status: ' + err.message);
     }
 }
 

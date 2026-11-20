@@ -47,6 +47,8 @@ function Device(data, runtime) {
     var connectGeneration = 0;                               // Invalidate in-flight connect after stop
     var connectionStatus = ConnectionStatusEnum.OFF;        // Connection status depending of read tag value response
     var pollingInterval = DEVICE_POLLING_INTERVAL;
+    var pollInProgress = false;
+    var lastResponseTimeMs = null;
     var sharedDevices = data.sharedDevices;
     var tryToConnect = 0;
     var comm;                                               // Interface to OPCUA/S7/.. Device
@@ -245,9 +247,24 @@ function Device(data, runtime) {
      * Call Device to polling
      */
     this.polling = function () {
-        if (currentCmd === DeviceCmdEnum.START && status === DeviceStatusEnum.IDLE) {
-            comm.polling();
+        if (currentCmd !== DeviceCmdEnum.START || status !== DeviceStatusEnum.IDLE || pollInProgress) {
+            return Promise.resolve(false);
         }
+        pollInProgress = true;
+        const startedAt = process.hrtime.bigint();
+        const lastReadBefore = comm.lastReadTimestamp() || 0;
+        return Promise.resolve().then(() => comm.polling()).then(() => {
+            const lastReadAfter = comm.lastReadTimestamp() || 0;
+            if (lastReadAfter > lastReadBefore) {
+                lastResponseTimeMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+            }
+            return true;
+        }).catch(err => {
+            logger.error(`'${property.name}' polling failed: ${err && err.message ? err.message : err}`);
+            return false;
+        }).finally(() => {
+            pollInProgress = false;
+        });
     }
 
     /**
@@ -313,6 +330,20 @@ function Device(data, runtime) {
      */
     this.getStatus = function () {
         return comm.getStatus();
+    }
+
+    this.getDiagnostics = function () {
+        const lastReadAt = comm.lastReadTimestamp() || null;
+        const now = Date.now();
+        const staleAfterMs = pollingInterval > 0 ? pollingInterval * 5 : null;
+        const quality = !lastReadAt ? 'unknown' :
+            (staleAfterMs && now - lastReadAt > staleAfterMs ? 'stale' : 'good');
+        return {
+            lastCommunicationAt: lastReadAt,
+            responseTimeMs: lastResponseTimeMs,
+            pollingIntervalMs: pollingInterval > 0 ? pollingInterval : null,
+            dataQuality: quality
+        };
     }
 
     /**

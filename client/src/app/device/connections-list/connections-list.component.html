@@ -16,6 +16,7 @@
                 <span class="connection-list-name pointer" (click)="onSelectDevice(device)"
                     matTooltip="{{'device.property-tags' | translate}}">{{device.name}}</span>
                 <span class="connection-list-meta">{{device.type}} &nbsp;|&nbsp; {{getConnectionAddress(device)}}</span>
+                <span class="connection-list-meta">{{getConnectionDiagnostics(device)}}</span>
             </div>
             <span class="connection-list-status-text">
                 {{getConnectionStatus(device) ? ('device.' + getConnectionStatus(device) | translate) : '-'}}
