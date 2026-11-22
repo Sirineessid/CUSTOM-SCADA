@@ -1,5 +1,5 @@
 /**
- * custom-SCADA: page /alarmes of the main FUXA: alarms of all the sites (active, history, statistics) and email notifications.
+ * custom-SCADA: page /alarmes of the main FUXA: alarms of all the sites (active, history, statistics) and Telegram notifications.
  * API /api/v1/alarms, /api/v1/alarms/history, /api/v1/alarms/stats, /api/v1/sites/{site}/alarms/.../ack, /api/v1/notifications.
  */
 (function () {
@@ -9,7 +9,7 @@
     var LEVELS = [['highhigh', 'Critique'], ['high', 'Haute'], ['low', 'Basse'], ['info', 'Information']];
     var LEVEL_NAME = { highhigh: 'Critique', high: 'Haute', low: 'Basse', info: 'Information' };
     var SOURCES = [['alarme', 'Seuils'], ['scenario', 'Scénarios'], ['communication', 'Communication']];
-    var ROLES = [['consultation', 'consultation'], ['operateur', 'opérateur'], ['ingenieur', 'ingénieur'], ['administrateur', 'administrateur']];
+
     var tab = 'active', timer = null, sites = [], history = [], notif = null, isAdmin = true, token = null;
 
     function esc(t) {
@@ -74,7 +74,7 @@
     app.innerHTML =
         '<div class="cards" id="a-sites"></div>' +
         '<div class="tabs"><button data-tab="active" class="on">Alarmes actives</button><button data-tab="history">Historique</button>' +
-        '<button data-tab="stats">Statistiques</button><button data-tab="notif" id="tab-notif-btn">Notifications email</button></div>' +
+        '<button data-tab="stats">Statistiques</button><button data-tab="notif" id="tab-notif-btn">Notifications Telegram</button></div>' +
         '<div class="row" id="filters"><select id="f-site"><option value="">Tous les sites</option></select>' +
         LEVELS.map(function (l) { return '<label><input type="checkbox" class="f-level" value="' + l[0] + '" checked> ' + l[1] + '</label>'; }).join('') +
         '<select id="f-source"><option value="">Toutes les sources</option>' + options(SOURCES) + '</select>' +
@@ -248,7 +248,7 @@
         return '<tr><td><input type="checkbox" data-on="' + i + '"' + (r.enabled ? ' checked' : '') + '></td><td>' + esc(r.name) + '</td>' +
             '<td>' + (r.sites.length ? esc(r.sites.join(', ')) : 'tous') + '</td><td>' + r.levels.map(badge).join(' ') + '</td>' +
             '<td>' + esc(SOURCES.filter(function (s) { return r.sources.indexOf(s[0]) >= 0; }).map(function (s) { return s[1]; }).join(', ')) + '</td>' +
-            '<td>' + esc(r.recipients.join(', ')) + (r.accounts ? (r.recipients.length ? '<br>' : '') + '<i>comptes du site (' + esc(r.minRole) + ' et plus)</i>' : '') + '</td>' +
+            '<td>' + esc(r.recipients.join(', ')) + '</td>' +
             '<td>' + (r.onEnd ? 'début et fin' : 'début') + '</td><td><button data-redit="' + i + '">Modifier</button> <button data-rdel="' + i + '">Supprimer</button></td></tr>';
     }
 
@@ -256,34 +256,27 @@
         var box = document.getElementById('tab-notif');
         Promise.all([api('GET', '/notifications'), api('GET', '/notifications/history', undefined, { limit: 100 })]).then(function (res) {
             notif = res[0].data;
-            var st = res[0].meta, s = notif.smtp;
+            var st = res[0].meta;
             box.innerHTML =
-                '<fieldset><legend>Envoi</legend><div class="row"><label class="blk"><input type="checkbox" id="n-enabled"' + (notif.enabled ? ' checked' : '') + '> Notifications activées</label>' +
-                '<label class="blk">Mode <select id="n-mode">' + options([['fichier', 'test : emails écrits dans des fichiers .eml'], ['smtp', 'serveur SMTP (envoi réel)']], notif.mode) + '</select></label>' +
+                '<fieldset><legend>Bot Telegram</legend><div class="row"><label class="blk"><input type="checkbox" id="n-enabled"' + (notif.enabled ? ' checked' : '') + '> Notifications activées</label>' +
+                '<label class="blk">Jeton du bot <input id="n-token" type="password" size="40" value="' + esc(notif.telegram.token) + '" placeholder="123456789:ABC..." autocomplete="new-password"></label>' +
                 '<label class="blk">Regroupement <input type="number" id="n-group" min="0" max="3600" style="width:70px" value="' + esc(notif.groupDelay) + '"> s</label>' +
-                '<label class="blk">Préfixe de l’objet <input id="n-prefix" size="10" value="' + esc(notif.subjectPrefix) + '"></label></div>' +
-                '<div class="row" id="n-smtp"><label class="blk">Serveur SMTP <input id="n-host" size="22" value="' + esc(s.host) + '" placeholder="smtp.entreprise.tn"></label>' +
-                '<label class="blk">Port <input id="n-port" type="number" style="width:70px" value="' + esc(s.port) + '"></label>' +
-                '<label class="blk"><input type="checkbox" id="n-secure"' + (s.secure ? ' checked' : '') + '> SSL/TLS direct (port 465)</label>' +
-                '<label class="blk">Utilisateur <input id="n-user" size="18" value="' + esc(s.user) + '" autocomplete="off"></label>' +
-                '<label class="blk">Mot de passe <input id="n-pass" type="password" size="14" value="' + esc(s.pass) + '" autocomplete="new-password"></label>' +
-                '<label class="blk">Expéditeur <input id="n-from" size="26" value="' + esc(s.from) + '" placeholder="scada@entreprise.tn"></label></div>' +
-                '<div class="row"><button id="n-save" class="primary">Enregistrer</button><input id="n-to" size="26" placeholder="adresse pour l’email de test"><button id="n-test">Envoyer un email de test</button>' +
+                '<label class="blk">Préfixe <input id="n-prefix" size="10" value="' + esc(notif.prefix) + '"></label></div>' +
+                '<div class="row"><button id="n-save" class="primary">Enregistrer</button><input id="n-to" size="22" placeholder="chat pour le message de test"><button id="n-test">Envoyer un message de test</button>' +
                 '<span id="n-status" class="status"></span></div>' +
+                '<p class="info">Gratuit. Créer le bot avec @BotFather dans Telegram (il donne le jeton). Chat : identifiant de la personne ou du groupe (négatif pour un groupe, donné par exemple par @userinfobot), ou @canal. ' +
+                'Chaque personne doit ouvrir le bot et appuyer sur Démarrer une fois ; pour un groupe, ajouter le bot au groupe.</p>' +
                 '<p class="info">Lecture des alarmes toutes les 10 s : ' + (st.lastPoll.time ? date(st.lastPoll.time) + ' (' + Object.keys(st.lastPoll.sites).map(function (k) { return esc(k) + ' : ' + esc(st.lastPoll.sites[k]); }).join(', ') + ')' : 'pas encore') +
                 '. Les alarmes déjà actives au démarrage du serveur ne sont pas envoyées.</p></fieldset>' +
                 '<fieldset><legend>Règles : qui reçoit quoi</legend><div class="row"><button id="r-new" class="primary">+ Nouvelle règle</button><span id="r-status" class="status"></span></div><div id="r-form"></div>' +
                 '<table><thead><tr><th>Active</th><th>Nom</th><th>Sites</th><th>Priorités</th><th>Sources</th><th>Destinataires</th><th>Envoi</th><th></th></tr></thead><tbody id="r-rows">' +
-                (notif.rules.map(ruleRow).join('') || '<tr><td colspan="8" class="empty">Aucune règle : aucun email envoyé.</td></tr>') + '</tbody></table></fieldset>' +
+                (notif.rules.map(ruleRow).join('') || '<tr><td colspan="8" class="empty">Aucune règle : aucun message envoyé.</td></tr>') + '</tbody></table></fieldset>' +
                 '<fieldset><legend>Derniers envois</legend><div class="scroll" style="max-height:320px"><table><thead><tr><th>Heure</th><th>Destinataire</th><th>Objet</th><th>Alarmes</th><th>Résultat</th></tr></thead><tbody>' +
                 (res[1].data.map(function (e) {
-                    var cls = e.status === 'échec' ? 'st-error' : e.mode === 'fichier' ? 'st-info' : 'st-ok';
+                    var cls = e.status === 'échec' ? 'st-error' : 'st-ok';
                     return '<tr><td>' + date(e.time) + '</td><td>' + esc(e.to) + '</td><td>' + esc(e.subject) + '</td><td>' + (e.test ? 'test' : e.count) + '</td>' +
-                        '<td><span class="st ' + cls + '">' + esc(e.status) + '</span>' + (e.error ? ' ' + esc(e.error) : '') + (e.file ? ' <small>' + esc(e.file) + '</small>' : '') + '</td></tr>';
+                        '<td><span class="st ' + cls + '">' + esc(e.status) + '</span>' + (e.error ? ' ' + esc(e.error) : '') + '</td></tr>';
                 }).join('') || '<tr><td colspan="5" class="empty">Aucun envoi.</td></tr>') + '</tbody></table></div></fieldset>';
-            var showSmtp = function () { document.getElementById('n-smtp').style.opacity = document.getElementById('n-mode').value === 'smtp' ? '1' : '0.5'; };
-            document.getElementById('n-mode').addEventListener('change', showSmtp);
-            showSmtp();
             document.getElementById('n-save').addEventListener('click', function () { saveNotif({}, 'n-status', 'Paramètres enregistrés.'); });
             document.getElementById('n-test').addEventListener('click', function () {
                 status('n-status', 'Envoi...');
@@ -291,7 +284,7 @@
                     return api('POST', '/notifications/test', { to: document.getElementById('n-to').value });
                 }).then(function (r) {
                     var e = r.data[0];
-                    status('n-status', e.status === 'échec' ? 'Échec : ' + e.error : 'Email de test ' + e.status + (e.file ? ' : sites/_notifications/envoyes/' + e.file : '') + '.', e.status === 'échec');
+                    status('n-status', e.status === 'échec' ? 'Échec : ' + e.error : 'Message de test ' + e.status + '.', e.status === 'échec');
                 }).catch(function (err) { status('n-status', err.message, true); });
             });
             document.getElementById('r-new').addEventListener('click', function () { editRule(null); });
@@ -315,12 +308,8 @@
 
     function saveNotif(extra, statusId, message) {
         var input = Object.assign({
-            enabled: document.getElementById('n-enabled').checked, mode: document.getElementById('n-mode').value,
-            groupDelay: Number(document.getElementById('n-group').value), subjectPrefix: document.getElementById('n-prefix').value,
-            smtp: {
-                host: document.getElementById('n-host').value, port: Number(document.getElementById('n-port').value), secure: document.getElementById('n-secure').checked,
-                user: document.getElementById('n-user').value, pass: document.getElementById('n-pass').value, from: document.getElementById('n-from').value
-            }
+            enabled: document.getElementById('n-enabled').checked, groupDelay: Number(document.getElementById('n-group').value),
+            prefix: document.getElementById('n-prefix').value, telegram: { token: document.getElementById('n-token').value }
         }, extra);
         return api('PUT', '/notifications', input).then(function (r) {
             notif = r.data;
@@ -330,7 +319,7 @@
     }
 
     function editRule(index) {
-        var r = index === null ? { name: '', enabled: true, sites: [], levels: ['highhigh', 'high'], sources: ['alarme', 'scenario', 'communication'], recipients: [], accounts: false, minRole: 'operateur', onEnd: false }
+        var r = index === null ? { name: '', enabled: true, sites: [], levels: ['highhigh', 'high'], sources: ['alarme', 'scenario', 'communication'], recipients: [], onEnd: false }
             : notif.rules[index];
         var form = document.getElementById('r-form');
         var check = function (cls, list, values) {
@@ -341,9 +330,7 @@
             '<div class="row"><b>Sites</b> (aucun coché = tous) ' + check('re-site', sites.map(function (s) { return [s, s]; }), r.sites) + '</div>' +
             '<div class="row"><b>Priorités</b> ' + check('re-level', LEVELS, r.levels) + '</div>' +
             '<div class="row"><b>Sources</b> ' + check('re-source', SOURCES, r.sources) + '</div>' +
-            '<div class="row"><label class="blk">Adresses <input id="re-to" size="50" value="' + esc(r.recipients.join(', ')) + '" placeholder="a@entreprise.tn, b@entreprise.tn"></label></div>' +
-            '<div class="row"><label class="blk"><input type="checkbox" id="re-accounts"' + (r.accounts ? ' checked' : '') + '> et les comptes (avec email) qui ont accès au site, rôle</label>' +
-            '<select id="re-role">' + options(ROLES, r.minRole) + '</select> et plus</div>' +
+            '<div class="row"><label class="blk">Chats Telegram <input id="re-to" size="50" value="' + esc(r.recipients.join(', ')) + '" placeholder="123456789, -1001234567890"></label></div>' +
             '<div class="row"><label class="blk"><input type="checkbox" id="re-end"' + (r.onEnd ? ' checked' : '') + '> envoyer aussi la fin des alarmes</label></div>' +
             '<div class="row"><button id="re-save" class="primary">Enregistrer</button><button id="re-cancel">Annuler</button><span id="re-status" class="status"></span></div></div>';
         var values = function (cls) { return Array.prototype.filter.call(form.querySelectorAll('.' + cls), function (c) { return c.checked; }).map(function (c) { return c.value; }); };
@@ -351,7 +338,7 @@
         document.getElementById('re-save').addEventListener('click', function () {
             var rule = {
                 id: r.id, enabled: r.enabled, name: document.getElementById('re-name').value.trim(), sites: values('re-site'), levels: values('re-level'), sources: values('re-source'),
-                recipients: document.getElementById('re-to').value, accounts: document.getElementById('re-accounts').checked, minRole: document.getElementById('re-role').value,
+                recipients: document.getElementById('re-to').value,
                 onEnd: document.getElementById('re-end').checked
             };
             var rules = notif.rules.slice();

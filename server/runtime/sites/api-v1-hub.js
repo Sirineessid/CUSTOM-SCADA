@@ -3,7 +3,7 @@
  *
  * GET    /api/v1                              list of the services
  * GET    /api/v1/alarms[/history|/stats]      alarms of all the sites (?site= to choose)
- * *      /api/v1/notifications              email notifications of the alarms (administrators)
+ * *      /api/v1/notifications              Telegram notifications of the alarms (administrators)
  * GET    /api/v1/sites                        sites (state, address, pages, files)
  * POST   /api/v1/sites                        create a site { site_id }
  * GET    /api/v1/sites/:site_id               one site
@@ -181,7 +181,7 @@ function router(manager, settings, logger) {
         send(res, stats, { errors: siteErrors(results) });
     }));
 
-    // ---------------------------------------------------------------- email notifications (administrators: gate)
+    // ---------------------------------------------------------------- Telegram notifications (administrators: gate)
     const notifier = require('./notifier');
     const by = req => (req.scadaUser ? req.scadaUser.username : null);
     app.get('/notifications', h((req, res) => send(res, notifier.getConfig(), notifier.status())));

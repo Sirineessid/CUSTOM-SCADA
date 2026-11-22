@@ -1,13 +1,13 @@
 /**
- * custom-SCADA: notifications of the alarms by email, made by the main FUXA for all the sites
+ * custom-SCADA: notifications of the alarms by Telegram (free bot), made by the main FUXA for all the sites
  *
  * - every 10 s the active alarms of each started site are read (GET /api/v1/alarms of the site: thresholds, scenarios, communication)
- * - a new alarm (or the end of an alarm, if asked) is sent to the recipients of the rules that match it (sites, priorities, sources)
- * - the alarms of the same recipients are grouped in one email (delay of grouping), to avoid many emails at once
+ * - a new alarm (or the end of an alarm, if asked) is sent to the Telegram chats of the rules that match it (sites, priorities, sources)
+ * - the alarms of the same chat are grouped in one message (delay of grouping), to avoid many messages at once
  * - the alarms already active when the main FUXA starts are not sent (they were sent before the restart)
- * - recipients: emails written in the rule, and/or the emails of the accounts that can open the site (central accounts)
- * - sending: SMTP server (nodemailer), or test mode: the emails are written in sites/_notifications/envoyes/*.eml
- * - sites/_notifications/config.json (settings), envois.jsonl (log of the emails sent or failed)
+ * - bot: made with @BotFather in Telegram (token); chat: id of a user or of a group (negative), or @channel;
+ *   a user must open the bot and press Start once before the bot can write to him
+ * - sites/_notifications/config.json (settings), envois.jsonl (log of the messages sent or failed)
  */
 
 'use strict';
@@ -19,10 +19,13 @@ const accounts = require('./accounts');
 const LEVELS = ['highhigh', 'high', 'low', 'info'];
 const LEVEL_TEXT = { highhigh: 'Critique', high: 'Haute', low: 'Basse', info: 'Information' };
 const SOURCES = ['alarme', 'scenario', 'communication'];
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CHAT = /^(-?\d{1,20}|@[A-Za-z0-9_]{5,64})$/;
+const TOKEN = /^\d{5,15}:[A-Za-z0-9_-]{20,80}$/;
 const MASK = '********';
 const POLL = 10000;
 const MAX_LOG = 2000;
+// address of the Telegram API (another address only for the tests)
+const API = process.env.SCADA_TELEGRAM_API || 'https://api.telegram.org';
 
 let dir = null, logger = null, manager = null, config = null, timer = null;
 let known = {};          // site -> { key: alarm } alarms active at the last reading
@@ -40,11 +43,7 @@ function httpError(status, code, message, details) {
 }
 
 function defaults() {
-    return {
-        enabled: false, mode: 'fichier', groupDelay: 30, subjectPrefix: '[SCADA]',
-        smtp: { host: '', port: 587, secure: false, user: '', pass: '', from: '' },
-        rules: []
-    };
+    return { enabled: false, groupDelay: 30, prefix: '[SCADA]', telegram: { token: '' }, rules: [] };
 }
 
 /**
@@ -62,7 +61,15 @@ function init(sitesDir, _manager, _logger) {
         const file = path.join(dir, 'config.json');
         if (fs.existsSync(file)) {
             const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-            config = Object.assign(defaults(), saved, { smtp: Object.assign(defaults().smtp, saved.smtp || {}) });
+            // only the Telegram settings are kept (the email version had smtp, mode, emails as recipients)
+            config = {
+                enabled: !!saved.enabled, groupDelay: Number.isFinite(saved.groupDelay) ? saved.groupDelay : 30,
+                prefix: saved.prefix !== undefined ? String(saved.prefix) : defaults().prefix,
+                telegram: { token: (saved.telegram && saved.telegram.token) || '' },
+                rules: (saved.rules || []).map(r => ({ id: r.id, name: r.name, enabled: r.enabled, sites: r.sites || [], levels: r.levels || [], sources: r.sources || [],
+                    recipients: (r.recipients || []).filter(c => CHAT.test(c)), onEnd: !!r.onEnd }))
+            };
+            if (config.enabled && !config.telegram.token) { config.enabled = false; }
         }
     } catch (err) {
         logger.error(`notifications: config.json invalide (${err.message})`);
@@ -73,11 +80,11 @@ function init(sitesDir, _manager, _logger) {
 }
 
 // ---------------------------------------------------------------- settings
-function cleanEmails(list, field) {
+function cleanChats(list, field) {
     const values = (Array.isArray(list) ? list : String(list || '').split(/[,;\s]+/)).map(e => String(e).trim()).filter(Boolean);
-    const bad = values.filter(e => !EMAIL.test(e));
+    const bad = values.filter(e => !CHAT.test(e));
     if (bad.length) {
-        throw httpError(400, 'invalid_request', `Adresse email invalide : ${bad.join(', ')}.`, { field });
+        throw httpError(400, 'invalid_request', `Chat Telegram invalide : ${bad.join(', ')} (identifiant numérique, négatif pour un groupe, ou @canal).`, { field });
     }
     return Array.from(new Set(values)).slice(0, 50);
 }
@@ -99,35 +106,27 @@ function cleanRules(list) {
         if (!levels.length || !sources.length) {
             throw httpError(400, 'invalid_request', `${name} : au moins une priorité et une source.`, { index: i, field: 'levels' });
         }
-        const recipients = cleanEmails(r.recipients, 'recipients');
-        const toAccounts = !!r.accounts;
-        if (!recipients.length && !toAccounts) {
-            throw httpError(400, 'invalid_request', `${name} : aucun destinataire (adresses ou comptes des sites).`, { index: i, field: 'recipients' });
+        const recipients = cleanChats(r.recipients, 'recipients');
+        if (!recipients.length) {
+            throw httpError(400, 'invalid_request', `${name} : aucun chat Telegram.`, { index: i, field: 'recipients' });
         }
-        const minRole = ['consultation', 'operateur', 'ingenieur', 'administrateur'].includes(r.minRole) ? r.minRole : 'operateur';
         return {
             id: /^[A-Za-z0-9_-]{1,40}$/.test(r.id || '') ? r.id : `n${Date.now().toString(36)}${i}`,
-            name, enabled: r.enabled !== false, sites, levels, sources, recipients, accounts: toAccounts, minRole, onEnd: !!r.onEnd
+            name, enabled: r.enabled !== false, sites, levels, sources, recipients, onEnd: !!r.onEnd
         };
     });
 }
 
 function getConfig() {
     const c = JSON.parse(JSON.stringify(config));
-    c.smtp.hasPassword = !!config.smtp.pass;
-    c.smtp.pass = config.smtp.pass ? MASK : '';
+    c.telegram.hasToken = !!config.telegram.token;
+    c.telegram.token = config.telegram.token ? MASK : '';
     return c;
 }
 
 function setConfig(input, by) {
     const next = JSON.parse(JSON.stringify(config));
     if (input.enabled !== undefined) { next.enabled = !!input.enabled; }
-    if (input.mode !== undefined) {
-        if (!['smtp', 'fichier'].includes(input.mode)) {
-            throw httpError(400, 'invalid_request', 'Mode invalide : smtp (serveur de messagerie) ou fichier (test).', { field: 'mode' });
-        }
-        next.mode = input.mode;
-    }
     if (input.groupDelay !== undefined) {
         const d = Number(input.groupDelay);
         if (!Number.isFinite(d) || d < 0 || d > 3600) {
@@ -135,31 +134,22 @@ function setConfig(input, by) {
         }
         next.groupDelay = d;
     }
-    if (input.subjectPrefix !== undefined) { next.subjectPrefix = String(input.subjectPrefix).slice(0, 40); }
-    if (input.smtp) {
-        const s = input.smtp;
-        ['host', 'user', 'from'].forEach(k => { if (s[k] !== undefined) { next.smtp[k] = String(s[k]).trim().slice(0, 200); } });
-        if (s.port !== undefined) {
-            const p = Number(s.port);
-            if (!Number.isInteger(p) || p < 1 || p > 65535) {
-                throw httpError(400, 'invalid_request', 'Port SMTP invalide.', { field: 'smtp.port' });
-            }
-            next.smtp.port = p;
+    if (input.prefix !== undefined) { next.prefix = String(input.prefix).slice(0, 40); }
+    // the token is shown masked: unchanged when the mask comes back
+    if (input.telegram && input.telegram.token !== undefined && input.telegram.token !== MASK) {
+        const token = String(input.telegram.token).trim();
+        if (token && !TOKEN.test(token)) {
+            throw httpError(400, 'invalid_request', 'Jeton du bot Telegram invalide (format 123456789:ABC..., donné par @BotFather).', { field: 'telegram.token' });
         }
-        if (s.secure !== undefined) { next.smtp.secure = !!s.secure; }
-        // the password is shown masked: unchanged when the mask comes back
-        if (s.pass !== undefined && s.pass !== MASK) { next.smtp.pass = String(s.pass); }
-        if (next.smtp.from && !EMAIL.test(next.smtp.from.replace(/^.*<([^>]+)>\s*$/, '$1'))) {
-            throw httpError(400, 'invalid_request', 'Adresse de l’expéditeur invalide.', { field: 'smtp.from' });
-        }
+        next.telegram.token = token;
     }
     if (input.rules !== undefined) { next.rules = cleanRules(input.rules); }
-    if (next.enabled && next.mode === 'smtp' && !next.smtp.host) {
-        throw httpError(400, 'invalid_request', 'Serveur SMTP manquant pour envoyer les emails.', { field: 'smtp.host' });
+    if (next.enabled && !next.telegram.token) {
+        throw httpError(400, 'invalid_request', 'Jeton du bot Telegram manquant.', { field: 'telegram.token' });
     }
     config = next;
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify(config, null, 2));
-    accounts.journal({ type: 'notifications', action: 'paramètres', user: by || null, result: 'ok', detail: `Notifications ${config.enabled ? 'activées' : 'désactivées'}, ${config.rules.length} règle(s)` });
+    accounts.journal({ type: 'notifications', action: 'paramètres', user: by || null, result: 'ok', detail: `Notifications Telegram ${config.enabled ? 'activées' : 'désactivées'}, ${config.rules.length} règle(s)` });
     return getConfig();
 }
 
@@ -212,21 +202,7 @@ function matchRules(site, alarm, kind) {
     }
 }
 
-/** emails of the rule for a site: written ones + accounts with an email that can open the site */
-function recipientsOf(rule, site) {
-    const list = rule.recipients.slice();
-    if (rule.accounts) {
-        accounts.listUsers().filter(u => u.active && u.email && EMAIL.test(u.email)).forEach(u => {
-            const user = accounts.findUser(u.username);
-            if (accounts.atLeast(accounts.roleOn(user, site), rule.minRole)) {
-                list.push(u.email);
-            }
-        });
-    }
-    return Array.from(new Set(list));
-}
-
-// ---------------------------------------------------------------- emails
+// ---------------------------------------------------------------- messages
 function esc(t) {
     return String(t === null || t === undefined ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
@@ -238,69 +214,48 @@ function dateText(ms) {
     return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
 
-/** one email per recipient with all the alarms of the queue for him */
+/** one message per chat with all the alarms of the queue for it */
 async function flush() {
     const items = queue;
     queue = [];
-    const byRecipient = {};
+    const byChat = {};
     items.forEach(item => {
-        recipientsOf(item.rule, item.site).forEach(email => {
-            const list = byRecipient[email] = byRecipient[email] || [];
+        item.rule.recipients.forEach(chat => {
+            const list = byChat[chat] = byChat[chat] || [];
             // the same alarm by two rules: once
             if (!list.some(x => x.site === item.site && x.kind === item.kind && keyOf(x.alarm) === keyOf(item.alarm))) {
                 list.push(item);
             }
         });
     });
-    for (const email of Object.keys(byRecipient)) {
-        await sendMail(email, byRecipient[email]);
+    for (const chat of Object.keys(byChat)) {
+        await send(chat, byChat[chat]);
     }
 }
 
-function compose(items) {
+/** title of the message (also kept in the log) */
+function title(items) {
+    if (items.length === 1) {
+        const i = items[0];
+        return `${i.kind === 'fin' ? 'Fin d’alarme' : 'Alarme ' + (LEVEL_TEXT[i.alarm.type] || '').toLowerCase()} - ${i.site} - ${i.alarm.text}`;
+    }
     const starts = items.filter(i => i.kind === 'debut');
     const critical = starts.filter(i => i.alarm.type === 'highhigh').length;
     const sites = Array.from(new Set(items.map(i => i.site)));
-    let subject;
-    if (items.length === 1) {
-        const i = items[0];
-        subject = `${i.kind === 'fin' ? 'Fin d’alarme' : 'Alarme ' + (LEVEL_TEXT[i.alarm.type] || '').toLowerCase()} - ${i.site} - ${i.alarm.text}`;
-    } else {
-        subject = `${starts.length} nouvelle(s) alarme(s)${critical ? ` dont ${critical} critique(s)` : ''}${items.length > starts.length ? `, ${items.length - starts.length} fin(s)` : ''} - ${sites.join(', ')}`;
-    }
-    subject = `${config.subjectPrefix ? config.subjectPrefix + ' ' : ''}${subject}`.slice(0, 200);
-    const color = { highhigh: '#c62828', high: '#ef6c00', low: '#f9a825', info: '#1565c0' };
-    const rows = items.map(i => {
-        const a = i.alarm;
-        return `<tr><td style="padding:4px 8px;border:1px solid #ccc">${esc(i.site)}</td>` +
-            `<td style="padding:4px 8px;border:1px solid #ccc"><span style="background:${color[a.type] || '#555'};color:#fff;padding:1px 8px;border-radius:9px">${esc(LEVEL_TEXT[a.type] || a.type)}</span></td>` +
-            `<td style="padding:4px 8px;border:1px solid #ccc">${i.kind === 'fin' ? 'Fin' : 'Début'}</td>` +
-            `<td style="padding:4px 8px;border:1px solid #ccc">${esc(dateText(i.kind === 'fin' ? (a.offtime || i.time) : a.ontime))}</td>` +
-            `<td style="padding:4px 8px;border:1px solid #ccc">${esc(a.text)}</td><td style="padding:4px 8px;border:1px solid #ccc">${esc(a.device || '')}</td>` +
-            `<td style="padding:4px 8px;border:1px solid #ccc">${esc(a.tag || '')}</td><td style="padding:4px 8px;border:1px solid #ccc">${esc(a.value === null || a.value === undefined ? '' : a.value)}</td>` +
-            `<td style="padding:4px 8px;border:1px solid #ccc">${esc(a.sourceText || '')}</td></tr>`;
-    }).join('');
-    const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222">` +
-        `<h2 style="color:#1f3864">Alarmes des sites</h2>` +
-        `<table style="border-collapse:collapse;font-size:13px"><tr style="background:#1f3864;color:#fff"><th style="padding:4px 8px">Site</th><th style="padding:4px 8px">Priorité</th>` +
-        `<th style="padding:4px 8px">Événement</th><th style="padding:4px 8px">Heure</th><th style="padding:4px 8px">Message</th><th style="padding:4px 8px">Équipement</th>` +
-        `<th style="padding:4px 8px">Tag</th><th style="padding:4px 8px">Valeur</th><th style="padding:4px 8px">Source</th></tr>${rows}</table>` +
-        `<p style="color:#777;font-size:12px">Message envoyé automatiquement par custom-SCADA. Les alarmes s’acquittent dans la page Alarmes de chaque site.</p></div>`;
-    const text = items.map(i => `${i.site} | ${LEVEL_TEXT[i.alarm.type] || i.alarm.type} | ${i.kind === 'fin' ? 'Fin' : 'Début'} | ` +
-        `${dateText(i.kind === 'fin' ? (i.alarm.offtime || i.time) : i.alarm.ontime)} | ${i.alarm.text} | ${i.alarm.device || ''} | ${i.alarm.tag || ''}`).join('\n');
-    return { subject, html, text };
+    return `${starts.length} nouvelle(s) alarme(s)${critical ? ` dont ${critical} critique(s)` : ''}${items.length > starts.length ? `, ${items.length - starts.length} fin(s)` : ''} - ${sites.join(', ')}`;
 }
 
-function transport() {
-    const nodemailer = require('nodemailer');
-    if (config.mode === 'fichier') {
-        return nodemailer.createTransport({ streamTransport: true, buffer: true, newline: 'windows' });
-    }
-    const s = config.smtp;
-    return nodemailer.createTransport({
-        host: s.host, port: s.port, secure: s.secure, auth: s.user ? { user: s.user, pass: s.pass } : undefined,
-        connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 30000
+/** Telegram message (HTML): title, then one block per alarm */
+function compose(items) {
+    const icon = { highhigh: '🔴', high: '🟠', low: '🟡', info: '🔵' };
+    const blocks = items.map(i => {
+        const a = i.alarm;
+        const value = a.value !== null && a.value !== undefined && a.value !== '' ? ` · valeur : ${esc(a.value)}` : '';
+        return `${i.kind === 'fin' ? '✅' : icon[a.type] || '⚪'} <b>${esc(i.site)}</b> · ${esc(LEVEL_TEXT[a.type] || a.type)} · ${i.kind === 'fin' ? 'Fin' : 'Début'} ` +
+            `${esc(dateText(i.kind === 'fin' ? (a.offtime || i.time) : a.ontime))}\n${esc(a.text)}${a.device ? `\nÉquipement : ${esc(a.device)}` : ''}${value}`;
     });
+    // shortcut: a group longer than the Telegram limit (4096 characters) is cut; split in several messages if it happens
+    return `${config.prefix ? esc(config.prefix) + ' ' : ''}<b>${esc(title(items))}</b>\n\n${blocks.join('\n\n')}`.slice(0, 4000);
 }
 
 function log(entry) {
@@ -314,45 +269,44 @@ function log(entry) {
     } catch (err) { /* log kept */ }
 }
 
-async function sendMail(to, items, test) {
-    const mail = test ? {
-        subject: `${config.subjectPrefix ? config.subjectPrefix + ' ' : ''}Email de test des notifications`,
-        text: 'Les notifications des alarmes de custom-SCADA fonctionnent.',
-        html: '<p style="font-family:Arial,sans-serif">Les notifications des alarmes de <b>custom-SCADA</b> fonctionnent.</p>'
-    } : compose(items);
+async function send(chat, items, test) {
+    const text = test ? `${config.prefix ? esc(config.prefix) + ' ' : ''}<b>Message de test</b>\nLes notifications des alarmes de custom-SCADA fonctionnent.` : compose(items);
     const entry = {
-        time: Date.now(), to, subject: mail.subject, mode: config.mode, test: !!test,
-        count: items.length, sites: Array.from(new Set(items.map(i => i.site))), status: 'envoyé', error: null, file: null
+        time: Date.now(), to: chat, subject: test ? 'Message de test' : title(items), test: !!test,
+        count: items.length, sites: Array.from(new Set(items.map(i => i.site))), status: 'envoyé', error: null
     };
     try {
-        const from = config.smtp.from || 'custom-scada@localhost';
-        const info = await transport().sendMail({ from, to, subject: mail.subject, text: mail.text, html: mail.html });
-        if (config.mode === 'fichier') {
-            const folder = path.join(dir, 'envoyes');
-            if (!fs.existsSync(folder)) { fs.mkdirSync(folder); }
-            entry.file = `${new Date().toISOString().replace(/[:.]/g, '-')}-${to.replace(/[^A-Za-z0-9@._-]/g, '_')}.eml`;
-            fs.writeFileSync(path.join(folder, entry.file), info.message);
-            entry.status = 'écrit (test)';
+        const r = await fetch(`${API}/bot${config.telegram.token}/sendMessage`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(15000),
+            body: JSON.stringify({ chat_id: chat, text, parse_mode: 'HTML', disable_web_page_preview: true })
+        });
+        const answer = await r.json().catch(() => ({}));
+        if (!answer.ok) {
+            throw new Error(answer.description || `réponse ${r.status}`);
         }
     } catch (err) {
         entry.status = 'échec';
-        entry.error = err.message;
-        logger.error(`notifications: email to ${to} failed (${err.message})`);
+        // the error of fetch can contain the address, and the address the token
+        entry.error = String(err.message).split(config.telegram.token).join(MASK);
+        logger.error(`notifications: Telegram message to ${chat} failed (${entry.error})`);
     }
     log(entry);
     return entry;
 }
 
 async function test(to, by) {
-    const list = cleanEmails(to, 'to');
+    if (!config.telegram.token) {
+        throw httpError(400, 'invalid_request', 'Jeton du bot Telegram manquant.', { field: 'telegram.token' });
+    }
+    const list = cleanChats(to, 'to');
     if (!list.length) {
-        throw httpError(400, 'invalid_request', 'Adresse du destinataire manquante.', { field: 'to' });
+        throw httpError(400, 'invalid_request', 'Chat Telegram du destinataire manquant.', { field: 'to' });
     }
     const results = [];
-    for (const email of list) {
-        results.push(await sendMail(email, [], true));
+    for (const chat of list) {
+        results.push(await send(chat, [], true));
     }
-    accounts.journal({ type: 'notifications', action: 'email de test', user: by || null, result: 'ok', detail: `Email de test vers ${list.join(', ')}` });
+    accounts.journal({ type: 'notifications', action: 'message de test', user: by || null, result: 'ok', detail: `Message Telegram de test vers ${list.join(', ')}` });
     return results;
 }
 
@@ -364,7 +318,7 @@ function history(limit) {
 }
 
 function status() {
-    return { enabled: config.enabled, mode: config.mode, rules: config.rules.filter(r => r.enabled).length, waiting: queue.length, lastPoll };
+    return { enabled: config.enabled, rules: config.rules.filter(r => r.enabled).length, waiting: queue.length, lastPoll };
 }
 
 module.exports = { init, getConfig, setConfig, test, history, status, LEVELS, SOURCES, _poll: poll, _flush: flush };
