@@ -870,6 +870,7 @@
     window.SiteApi = {
         base: base,
         siteId: siteId,
+        headers: headers,
         request: request,
         info: info,
         values: values,

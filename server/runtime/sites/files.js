@@ -138,6 +138,10 @@ async function writeFiles() {
     fs.copyFileSync(path.join(__dirname, 'diagnostic.client.js'), path.join(siteDir, 'diagnostic.js'));
     fs.writeFileSync(path.join(siteDir, 'diagnostic.html'), diagnosticHtml());
     files.push({ file: 'diagnostic.html', page: 'Diagnostic', viewId: null }, { file: 'diagnostic.js', page: 'Diagnostic (script)', viewId: null });
+    // light CMMS: equipment records, documents, work orders, preventive maintenance and spares
+    fs.copyFileSync(path.join(__dirname, 'maintenance.client.js'), path.join(siteDir, 'maintenance.js'));
+    fs.writeFileSync(path.join(siteDir, 'maintenance.html'), maintenanceHtml());
+    files.push({ file: 'maintenance.html', page: 'Maintenance', viewId: null }, { file: 'maintenance.js', page: 'Maintenance (script)', viewId: null });
     files.push({ file: 'versions.html', page: 'Versions', viewId: null }, { file: 'versions.js', page: 'Versions (script)', viewId: null });
     files.push({ file: 'api.html', page: 'API', viewId: null }, { file: 'site-api.js', page: 'API (script)', viewId: null },
         { file: 'courbes.js', page: 'Courbes (script)', viewId: null }, { file: 'configuration-graphes.js', page: 'Configuration des graphiques (script)', viewId: null });
@@ -582,6 +586,18 @@ function diagnosticHtml() {
 <script src="diagnostic.js"></script>`);
 }
 
+function maintenanceHtml() {
+    return document(`Maintenance - ${siteName}`, `${navBar('maintenance.html')}
+<header>
+  <h1>Maintenance industrielle <small>${esc(siteName)}</small></h1>
+  <p class="info">Dossiers d’équipements, documentation PDF, interventions et pannes, maintenance préventive, pièces de rechange et indicateurs de fonctionnement.
+     Les données sont propres à ce site. Associez des tags FUXA pour afficher l’état, les défauts, le compteur horaire et la disponibilité.</p>
+</header>
+<div id="maintenance-app" data-site="${esc(siteName)}"></div>
+<script src="site-api.js"></script>
+<script src="maintenance.js"></script>`);
+}
+
 function versionsHtml() {
     return document(`Versions - ${siteName}`, `${navBar('versions.html')}
 <header>
@@ -740,7 +756,7 @@ function navBar(current) {
     return `<nav class="sitenav" id="sitenav" data-site="${esc(siteName)}" data-file="${esc(current)}">
   <a href="${base}/home" class="back" onclick="if (history.length > 1 && document.referrer) { history.back(); return false; }">&#8592; Retour</a>
   ${link(`${base}/home`, '▶ Exploitation', false, 'Mode exploitation : supervision du site (dernière page consultée)')}
-  <span class="sep"></span>${pages}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
+  <span class="sep"></span>${pages}${link('maintenance.html', 'Maintenance', current === 'maintenance.html')}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
   <span class="sep"></span>${link(`${base}/editor`, '✎ Édition', false, 'Mode édition : éditeur FUXA du site')}
   <span style="flex:1"></span>
   <label class="site-switch" title="Passer à un autre site (sur sa dernière page consultée)">Site <select id="site-switch"><option>${esc(siteName)}</option></select></label>
