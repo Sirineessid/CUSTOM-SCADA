@@ -141,7 +141,10 @@ export class ReportListComponent implements OnInit, AfterViewInit, OnDestroy {
 
     onDownloadDetail(file: string) {
         this.commandService.getReportFile(file).subscribe(content => {
-            let blob = new Blob([content], { type: 'application/pdf' });
+            let contentType = file.toLowerCase().endsWith('.xlsx')
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : 'application/pdf';
+            let blob = new Blob([content], { type: contentType });
             FileSaver.saveAs(blob, file);
         }, err => {
             console.error('Download Report File err:', err);
@@ -165,4 +168,3 @@ export class ReportListComponent implements OnInit, AfterViewInit, OnDestroy {
         });
     }
 }
-

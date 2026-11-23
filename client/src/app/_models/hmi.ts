@@ -228,11 +228,34 @@ export class GaugeProperty {
     events: GaugeEvent[] = [];
     actions: GaugeAction[] = [];
     options: any;
+    optionSourceTagId?: string;
+    optionRefreshTagId?: string;
     readonly: boolean;
     text: string;               // Text property (used by button)
     icon?: string;              // Optional Material icon (used by button)
     image?: string;             // Optional image resource (used by button)
+    buttonAction?: ButtonActionProperty;    // Optional toggle/press action (used by button)
     style?: GaugeShapeStyle;
+}
+
+export enum ButtonActionMode {
+    none = 'none',
+    toggle = 'toggle',
+    press = 'press',
+    set = 'set',
+}
+
+export interface ButtonActionProperty {
+    mode: ButtonActionMode;
+    offValue?: string;          // toggle
+    onValue?: string;           // toggle
+    pressValue?: string;        // press
+    releaseValue?: string;      // press
+    minHoldTime?: number;       // press, seconds (>0, max 3600)
+    setValue?: string;          // set
+    showPressed?: boolean;      // render the button as pressed while active
+    activeLabel?: string;       // optional label shown when the button state changes to active
+    inactiveLabel?: string;     // optional label shown when the button state changes to inactive
 }
 
 export interface PermissionRoles {
@@ -245,6 +268,16 @@ export class WidgetProperty extends GaugeProperty {
     scriptContent?: { moduleId: string, content: string };
     svgContent?: string;
     varsToBind?: WidgetPropertyVariable[] = [];
+    symbolAppearance?: WidgetSymbolAppearance;
+}
+
+export interface WidgetSymbolAppearance {
+    fill?: string;
+    stroke?: string;
+    strokeWidth?: number;
+    rotation?: number;
+    label?: string;
+    labelColor?: string;
 }
 
 export interface InputOptionsProperty {
@@ -798,7 +831,6 @@ export interface VideoOptions {
     showControls?: boolean;
     loop?: boolean;
 }
-
 export class GaugeShapeStyle {
     general: GaugeShapeGeneral = new GaugeShapeGeneral();
     label: GaugeShapeLabel = new GaugeShapeLabel();

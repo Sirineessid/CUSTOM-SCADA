@@ -64,6 +64,7 @@ export interface ReportItemTable extends ReportItem {
     columns: ReportTableColumn[];
     range: ReportDateRangeType;
     interval: ReportIntervalType;
+    comparePreviousPeriod?: boolean;
 }
 
 export interface ReportTableColumn {

@@ -14,12 +14,14 @@ var GenericEthernetIPclient = require('./genericethernetip');
 var OmronEthernetIPclient = require('./omron-ethernetip');
 var FuxaServer = require('./fuxaserver');
 var ODBCclient = require('./odbc');
+var PostgreSQLclient = require('./postgres');
 var ADSclient = require('./adsclient');
 // var TEMPLATEclient = require('./template');
 var GpioClient = require('./gpio');
 var WebCamClient = require('./webcam');
 var MELSECclient = require('./melsec');
 var REDISclient = require('./redis');
+var SNMPclient = require('./snmp');
 
 const path = require('path');
 const utils = require('../utils');
@@ -45,6 +47,8 @@ function Device(data, runtime) {
     var connectGeneration = 0;                               // Invalidate in-flight connect after stop
     var connectionStatus = ConnectionStatusEnum.OFF;        // Connection status depending of read tag value response
     var pollingInterval = DEVICE_POLLING_INTERVAL;
+    var pollInProgress = false;
+    var lastResponseTimeMs = null;
     var sharedDevices = data.sharedDevices;
     var tryToConnect = 0;
     var comm;                                               // Interface to OPCUA/S7/.. Device
@@ -108,6 +112,8 @@ function Device(data, runtime) {
             return null;
         }
         comm = ODBCclient.create(data, logger, events, manager);
+    } else if (data.type === DeviceEnum.PostgreSQL) {
+        comm = PostgreSQLclient.create(data, logger, events, runtime);
     } else if (data.type === DeviceEnum.ADSclient) {
         if (!ADSclient) {
             return null;
@@ -133,6 +139,11 @@ function Device(data, runtime) {
             return null;
         }
         comm = REDISclient.create(data, logger, events, manager, runtime);
+    } else if (data.type === DeviceEnum.SNMP) {
+        if (!SNMPclient) {
+            return null;
+        }
+        comm = SNMPclient.create(data, logger, events, manager, runtime);
     }
     // else if (data.type === DeviceEnum.Template) {
     //     if (!TEMPLATEclient) {
@@ -220,7 +231,9 @@ function Device(data, runtime) {
         // check connection status
         const now = Date.now();
         var lastRead = comm.lastReadTimestamp() || 0;
-        if (lastRead < now - pollingInterval * 5) {
+        if (pollingInterval === DISABLE_POLLING_INTERVAL) {
+            connectionStatus = comm.isConnected() ? ConnectionStatusEnum.ON : ConnectionStatusEnum.OFF;
+        } else if (lastRead < now - pollingInterval * 5) {
             connectionStatus = ConnectionStatusEnum.OFF;
         } else if (lastRead < now - pollingInterval * 2) {
             connectionStatus = ConnectionStatusEnum.WARNING;
@@ -236,9 +249,24 @@ function Device(data, runtime) {
      * Call Device to polling
      */
     this.polling = function () {
-        if (currentCmd === DeviceCmdEnum.START && status === DeviceStatusEnum.IDLE) {
-            comm.polling();
+        if (currentCmd !== DeviceCmdEnum.START || status !== DeviceStatusEnum.IDLE || pollInProgress) {
+            return Promise.resolve(false);
         }
+        pollInProgress = true;
+        const startedAt = process.hrtime.bigint();
+        const lastReadBefore = comm.lastReadTimestamp() || 0;
+        return Promise.resolve().then(() => comm.polling()).then(() => {
+            const lastReadAfter = comm.lastReadTimestamp() || 0;
+            if (lastReadAfter > lastReadBefore) {
+                lastResponseTimeMs = Number(process.hrtime.bigint() - startedAt) / 1e6;
+            }
+            return true;
+        }).catch(err => {
+            logger.error(`'${property.name}' polling failed: ${err && err.message ? err.message : err}`);
+            return false;
+        }).finally(() => {
+            pollInProgress = false;
+        });
     }
 
     /**
@@ -306,6 +334,20 @@ function Device(data, runtime) {
         return comm.getStatus();
     }
 
+    this.getDiagnostics = function () {
+        const lastReadAt = comm.lastReadTimestamp() || null;
+        const now = Date.now();
+        const staleAfterMs = pollingInterval > 0 ? pollingInterval * 5 : null;
+        const quality = pollingInterval === DISABLE_POLLING_INTERVAL || !lastReadAt ? 'unknown' :
+            (staleAfterMs && now - lastReadAt > staleAfterMs ? 'stale' : 'good');
+        return {
+            lastCommunicationAt: lastReadAt,
+            responseTimeMs: lastResponseTimeMs,
+            pollingIntervalMs: pollingInterval > 0 ? pollingInterval : null,
+            dataQuality: quality
+        };
+    }
+
     /**
      * Call Device to set Tag value
      */
@@ -337,7 +379,7 @@ function Device(data, runtime) {
                 }).catch(function (err) {
                     reject(err);
                 });
-            } else if (data.type === DeviceEnum.ODBC) {
+            } else if (data.type === DeviceEnum.ODBC || data.type === DeviceEnum.PostgreSQL) {
                 comm.browse(path, callback).then(function (result) {
                     resolve(result);
                 }).catch(function (err) {
@@ -345,6 +387,12 @@ function Device(data, runtime) {
                 });
             } else if (data.type === DeviceEnum.REDIS) {
                 comm.browse(path, callback).then(function (result) {
+                    resolve(result);
+                }).catch(function (err) {
+                    reject(err);
+                });
+            } else if (data.type === DeviceEnum.SNMP) {
+                comm.browse(path).then(function (result) {
                     resolve(result);
                 }).catch(function (err) {
                     reject(err);
@@ -425,7 +473,9 @@ function Device(data, runtime) {
      * Bind function to ask project stored property (security)
      */
     this.bindGetProperty = function (fnc) {
-        if (data.type === DeviceEnum.OPCUA || data.type === DeviceEnum.MQTTclient || data.type === DeviceEnum.ODBC) {
+        if (data.type === DeviceEnum.OPCUA || data.type === DeviceEnum.MQTTclient ||
+            data.type === DeviceEnum.ODBC || data.type === DeviceEnum.SNMP ||
+            data.type === DeviceEnum.PostgreSQL) {
             comm.bindGetProperty(fnc);
         }
     }
@@ -595,6 +645,8 @@ function loadPlugin(type, module) {
         MELSECclient = require(module);
     } else if (type === DeviceEnum.REDIS) {
         REDISclient = require(module);
+    } else if (type === DeviceEnum.SNMP) {
+        SNMPclient = require(module);
     }
 }
 
@@ -641,12 +693,14 @@ var DeviceEnum = {
     OmronEthernetIP: 'OmronEthernetIP',
     FuxaServer: 'FuxaServer',
     ODBC: 'ODBC',
+    PostgreSQL: 'PostgreSQL',
     ADSclient: 'ADSclient',
     GPIO: 'GPIO',
     internal: 'internal',
     WebCam: 'WebCam',
     MELSEC: 'MELSEC',
     REDIS: 'REDIS',
+    SNMP: 'SNMP',
     // Template: 'template'
 }
 

@@ -208,6 +208,33 @@ function getDevicesStatus() {
 }
 
 /**
+ * Return latest communication diagnostics for a device
+ */
+function getDeviceDiagnostics(deviceId) {
+    if (activeDevices[deviceId] && activeDevices[deviceId].getDiagnostics) {
+        return activeDevices[deviceId].getDiagnostics();
+    }
+    return {
+        lastCommunicationAt: null,
+        responseTimeMs: null,
+        pollingIntervalMs: null,
+        dataQuality: 'unknown'
+    };
+}
+
+function resolveDeviceId(deviceIdOrName) {
+    const devices = runtime && runtime.project && runtime.project.getDevices
+        ? runtime.project.getDevices()
+        : {};
+    for (const id in devices) {
+        if (id === deviceIdOrName || devices[id].name === deviceIdOrName) {
+            return id;
+        }
+    }
+    return deviceIdOrName;
+}
+
+/**
  * Return all devices values
  */
 function getDevicesValues() {
@@ -485,6 +512,16 @@ function browseDevice(deviceid, node, callback) {
     });
 }
 
+function getPostgreSQLDistinctValues(tagId) {
+    const deviceId = getDeviceIdFromTag(tagId);
+    const device = activeDevices[deviceId];
+    const comm = device && device.getComm();
+    if (!comm || typeof comm.getDistinctValuesForTag !== 'function') {
+        return Promise.reject(new Error('The option source must be a tag on an active PostgreSQL device'));
+    }
+    return comm.getDistinctValuesForTag(tagId);
+}
+
 function browseForDevices(deviceid, node, callback) {
     if (activeDevices[deviceid] && activeDevices[deviceid].browseForDevices) {
         return activeDevices[deviceid].browseForDevices(node, callback);
@@ -576,6 +613,8 @@ var devices = module.exports = {
     updateDevice: updateDevice,
     removeDevice: removeDevice,
     getDevicesStatus: getDevicesStatus,
+    getDeviceDiagnostics: getDeviceDiagnostics,
+    resolveDeviceId: resolveDeviceId,
     getDevicesValues: getDevicesValues,
     getDeviceValue: getDeviceValue,
     getTagValue: getTagValue,
@@ -583,6 +622,7 @@ var devices = module.exports = {
     setDeviceValue: setDeviceValue,
     getDeviceIdFromTag: getDeviceIdFromTag,
     browseDevice: browseDevice,
+    getPostgreSQLDistinctValues: getPostgreSQLDistinctValues,
     browseForDevices: browseForDevices,
     readNodeAttribute: readNodeAttribute,
     getDeviceTagsResult: getDeviceTagsResult,

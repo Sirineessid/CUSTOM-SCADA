@@ -69,6 +69,8 @@ export class GaugesManager {
 
     // list of gauges tags to speed up the check
     static gaugesTags = [];
+    private selectOptionsRequestSequence = 0;
+    private latestSelectOptionsRequest = new Map<string, number>();
 
     // list of gauges with input
     static GaugeWithProperty = [HtmlInputComponent.prefix, HtmlSelectComponent.prefix, HtmlSwitchComponent.prefix];
@@ -308,8 +310,11 @@ export class GaugesManager {
                 }
             }
         }
+        if (ga.type.startsWith(HtmlSelectComponent.TypeTag) && ga.property?.optionSourceTagId) {
+            this.refreshSelectOptions(ga);
+        }
         let mouseEvents: GaugeEvent[] = this.getBindMouseEvent(ga, null);
-        if (mouseEvents && mouseEvents.length > 0) {
+        if (mouseEvents?.length > 0 || HtmlButtonComponent.hasButtonAction(ga)) {
             this.eventGauge[ga.id] = ga;
             if (!this.mapGaugeView[ga.id]) {
                 this.mapGaugeView[ga.id] = {};
@@ -568,6 +573,9 @@ export class GaugesManager {
         gaugeStatus.variablesValue[sig.id] = sig.value;
         // custom-SCADA: page Visibility (controlled by bit / word)
         ShapeStyleHelper.processVisibility(ga, svgele, gaugeStatus);
+        if (ga.type.startsWith(HtmlSelectComponent.TypeTag) && ga.property?.optionRefreshTagId === sig.id) {
+            this.refreshSelectOptions(ga);
+        }
         for (let i = 0; i < GaugesManager.Gauges.length; i++) {
             if (ga.type.startsWith(GaugesManager.Gauges[i].TypeTag)) {
                 if (ga.type.startsWith(HtmlChartComponent.TypeTag)) {
@@ -642,6 +650,27 @@ export class GaugesManager {
                 }
             }
         }
+    }
+
+    private refreshSelectOptions(ga: GaugeSettings) {
+        const sourceTagId = ga.property?.optionSourceTagId;
+        if (!sourceTagId) {
+            return;
+        }
+
+        const requestSequence = ++this.selectOptionsRequestSequence;
+        this.latestSelectOptionsRequest.set(ga.id, requestSequence);
+        this.hmiService.requestPostgreSQLDistinctValues(sourceTagId).then(values => {
+            if (this.latestSelectOptionsRequest.get(ga.id) === requestSequence) {
+                HtmlSelectComponent.setDynamicOptions(ga, values);
+            }
+        }).catch(error => {
+            if (this.latestSelectOptionsRequest.get(ga.id) === requestSequence) {
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(`Failed to load options for Select gauge '${ga.id}': ${message}`);
+                HtmlSelectComponent.setDynamicOptionsError(ga, message);
+            }
+        });
     }
 
     toggleSignalValue(sigid: string, bitmask?: number) {
@@ -751,6 +780,10 @@ export class GaugesManager {
             } else if (ele.type.startsWith(HtmlSelectComponent.TypeTag)) {
                 colors.fill = HtmlSelectComponent.getFillColor(eles[0]);
                 colors.stroke = HtmlSelectComponent.getStrokeColor(eles[0]);
+                return true;
+            } else if (ele.type.startsWith(HtmlImageComponent.TypeTag)) {
+                colors.fill = HtmlImageComponent.getBackgroundElement(eles[0])?.getAttribute('fill') || eles[0].getAttribute('fill');
+                colors.stroke = eles[0].getAttribute('stroke');
                 return true;
             }
         }

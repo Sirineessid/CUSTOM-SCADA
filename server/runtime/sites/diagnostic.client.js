@@ -11,6 +11,10 @@
         ok: ['OK', 'st-ok'], warning: ['À surveiller', 'st-warning'], error: ['Problème', 'st-error'],
         stopped: ['Arrêté', 'st-off'], starting: ['Démarrage', 'st-off']
     };
+    var QUALITY = {
+        good: ['Bonne', 'st-ok'], uncertain: ['Incertaine', 'st-warning'],
+        bad: ['Mauvaise', 'st-error'], stale: ['Périmée', 'st-warning'], unknown: ['Inconnue', 'st-off']
+    };
     var LEVEL = { error: ['Erreur', 'st-error'], warning: ['Avertissement', 'st-warning'], info: ['Information', 'st-info'] };
     var timer = null, devices = [];
 
@@ -54,7 +58,7 @@
         '<h3>Tags sans mise à jour</h3>' +
         '<p class="info">Un tag est sans mise à jour quand sa dernière valeur date de plus de 10 fois la période de lecture de son équipement (60 s au moins).</p>' +
         '<div class="period"><label><input type="checkbox" id="d-alltags"> Afficher tous les tags avec leur dernière mise à jour</label></div>' +
-        '<div class="history"><table><thead><tr><th>Tag</th><th>Équipement</th><th>Adresse</th><th>Dernière valeur</th><th>Dernière mise à jour</th><th>Limite</th><th>État</th></tr></thead>' +
+        '<div class="history"><table><thead><tr><th>Tag</th><th>Équipement</th><th>Adresse</th><th>Dernière valeur</th><th>Dernière mise à jour</th><th>Qualité</th><th>Limite</th><th>État</th></tr></thead>' +
         '<tbody id="d-tags"></tbody></table></div>' +
         '<h3>Journal des communications</h3>' +
         '<div class="period"><select id="d-level"><option value="">Tous les niveaux</option><option value="error">Erreurs</option><option value="warning">Avertissements</option><option value="info">Informations</option></select>' +
@@ -118,10 +122,12 @@
         var all = document.getElementById('d-alltags').checked;
         return SiteApi.request('GET', '/diagnostic/tags', undefined, all ? {} : { stale: 'true' }).then(function (r) {
             document.getElementById('d-tags').innerHTML = r.data.map(function (t) {
+                var quality = QUALITY[t.quality] || QUALITY.unknown;
                 return '<tr' + (t.stale ? ' class="row-critical"' : '') + '><td>' + esc(t.name) + '</td><td>' + esc(t.device) + '</td><td>' + esc(t.address) + '</td>' +
                     '<td>' + esc(value(t.value)) + '</td><td>' + (t.lastUpdate ? date(t.lastUpdate) + ' <small>(' + age(t.age) + ')</small>' : 'jamais') + '</td>' +
+                    '<td><span class="st ' + quality[1] + '">' + esc(quality[0]) + '</span></td>' +
                     '<td>' + Math.round(t.limit / 1000) + ' s</td><td>' + (t.stale ? '<span class="st st-error">sans mise à jour</span>' : '<span class="st st-ok">à jour</span>') + '</td></tr>';
-            }).join('') || '<tr><td colspan="7" class="empty">' + (all ? 'Aucun tag.' : 'Tous les tags sont à jour.') + '</td></tr>';
+            }).join('') || '<tr><td colspan="8" class="empty">' + (all ? 'Aucun tag.' : 'Tous les tags sont à jour.') + '</td></tr>';
         });
     }
 

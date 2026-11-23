@@ -149,7 +149,11 @@ function report(project) {
             }
             result.tags.push({
                 id: tag.id, name: tag.name, device: device.name, address: tag.address || '', value: current ? current.value : null,
-                lastUpdate: time, age: time ? now - time : null, limit, stale: isStale
+                lastUpdate: time, sourceTimestamp: current ? current.sourceTimestamp || null : null,
+                quality: current && (current.quality === 'bad' || current.quality === 'uncertain')
+                    ? current.quality : !time ? 'unknown' : isStale ? 'stale' : current && current.quality || 'good',
+                qualityTimestamp: current ? current.qualityTimestamp || null : null,
+                age: time ? now - time : null, limit, stale: isStale
             });
         });
         const deviceEvents = events.filter(e => e.device === device.name && e.level !== 'info');

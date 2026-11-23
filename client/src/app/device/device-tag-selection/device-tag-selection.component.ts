@@ -132,6 +132,10 @@ export class DeviceTagSelectionComponent implements OnInit, AfterViewInit, OnDes
             this.tagPropertyService.addTagsOpcUa(device).subscribe(result => {
                 this.loadDevicesTags();
             });
+        } else if (device.type === DeviceType.PostgreSQL) {
+            this.tagPropertyService.addTagsPostgreSQL(device).subscribe(result => {
+                this.loadDevicesTags();
+            });
         } else if (device.type === DeviceType.BACnet) {
             this.tagPropertyService.editTagPropertyBacnet(device).subscribe(result => {
                 this.loadDevicesTags();
@@ -178,6 +182,10 @@ export class DeviceTagSelectionComponent implements OnInit, AfterViewInit, OnDes
             });
         } else if (device.type === DeviceType.REDIS) {
             this.tagPropertyService.editTagPropertyRedis(device, newTag, true).subscribe(_ => {
+                this.loadDevicesTags(newTag, device.name);
+            });
+        } else if (device.type === DeviceType.SNMP) {
+            this.tagPropertyService.editTagPropertySnmp(device, newTag, true).subscribe(_ => {
                 this.loadDevicesTags(newTag, device.name);
             });
         }

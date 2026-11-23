@@ -167,7 +167,11 @@ function init(_io, _api, _settings, _log, eventsMain) {
             if (message === 'get') {
                 var adevs = devices.getDevicesStatus();
                 for (var id in adevs) {
-                    socket.emit(Events.IoEventTypes.DEVICE_STATUS, { id: id, status: adevs[id] });
+                    socket.emit(Events.IoEventTypes.DEVICE_STATUS, {
+                        id: id,
+                        status: adevs[id],
+                        ...devices.getDeviceDiagnostics(id)
+                    });
                 }
             } else {
                 logger.warn(`${Events.IoEventTypes.DEVICE_STATUS}: rejected client status update from ${socket.userId || 'guest'}`);
@@ -243,6 +247,24 @@ function init(_io, _api, _settings, _log, eventsMain) {
             } catch (err) {
                 logger.error(`${Events.IoEventTypes.DEVICE_BROWSE}: ${err}`);
             }
+        });
+        socket.on(Events.IoEventTypes.DEVICE_OPTIONS_REQUEST, (message, acknowledge) => {
+            const reply = typeof acknowledge === 'function' ? acknowledge : () => {};
+            if (!isSocketWriteAuthorized(socket)) {
+                logger.warn(`${Events.IoEventTypes.DEVICE_OPTIONS_REQUEST}: unauthorized request from ${socket.userId || 'guest'}`);
+                reply({ error: 'Unauthorized request' });
+                return;
+            }
+            if (!message || typeof message.tagId !== 'string' || !message.tagId) {
+                reply({ error: 'A PostgreSQL option source tag is required' });
+                return;
+            }
+            devices.getPostgreSQLDistinctValues(message.tagId).then(result => {
+                reply({ result });
+            }).catch(error => {
+                logger.error(`${Events.IoEventTypes.DEVICE_OPTIONS_REQUEST}: ${error.stack || error}`);
+                reply({ error: error.message || 'Unable to load PostgreSQL options' });
+            });
         });
         socket.on(Events.IoEventTypes.DEVICE_BROWSE_FOR_DEVICES, (message) => {
             if (!isSocketAdminAuthorized(socket)) {
@@ -402,8 +424,14 @@ function init(_io, _api, _settings, _log, eventsMain) {
         });
         socket.on(Events.IoEventTypes.DEVICE_TAGS_SUBSCRIBE, (message) => {
             try {
-                socket.tagsClientSubscriptions = message.tagsId
-                if (message.sendLastValue) {
+                // Never trust the client payload: a non-array value would make
+                // the broadcast loop below throw on .includes() and abort the
+                // delivery for every other socket (see updateDeviceValues).
+                const tagsId = message && message.tagsId;
+                socket.tagsClientSubscriptions = Array.isArray(tagsId)
+                    ? tagsId.filter(id => typeof id === 'string')
+                    : [];
+                if (message && message.sendLastValue) {
                     var adevs = devices.getDevicesValues();
                     for (var id in adevs) {
                         updateDeviceValues({ id: id, values: adevs[id] || {}});
@@ -601,13 +629,22 @@ function updateDeviceValues(event) {
         //!TOFIX
         if (settings.broadcastAll === false) {
             Array.from(io.sockets.sockets.values()).forEach((socket) => {
-                const tags = Object.values(event.values).filter((tag) => {
-                    return socket.tagsClientSubscriptions.includes(tag.id);
-                });
-                socket.emit(Events.IoEventTypes.DEVICE_VALUES, {
-                    id: event.id,
-                    values: tagsToSend(tags)
-                });
+                // One malformed subscription must not stop the broadcast for
+                // all the other connected clients.
+                try {
+                    const subscriptions = Array.isArray(socket.tagsClientSubscriptions)
+                        ? socket.tagsClientSubscriptions
+                        : [];
+                    const tags = Object.values(event.values).filter((tag) => {
+                        return subscriptions.includes(tag.id);
+                    });
+                    socket.emit(Events.IoEventTypes.DEVICE_VALUES, {
+                        id: event.id,
+                        values: tagsToSend(tags)
+                    });
+                } catch (err) {
+                    logger.error(`${Events.IoEventTypes.DEVICE_VALUES}: ${err.message}`);
+                }
             });
         } else {
             io.emit(Events.IoEventTypes.DEVICE_VALUES, {
@@ -647,8 +684,11 @@ function subscriptionTagChange(tagid) {
  */
 function updateDeviceStatus(event) {
     try {
-        io.emit(Events.IoEventTypes.DEVICE_STATUS, event);
+        const deviceId = event && event.id ? devices.resolveDeviceId(event.id) : null;
+        const diagnostics = deviceId ? devices.getDeviceDiagnostics(deviceId) : {};
+        io.emit(Events.IoEventTypes.DEVICE_STATUS, { ...event, ...(deviceId ? { id: deviceId } : {}), ...diagnostics });
     } catch (err) {
+        logger.error('Error updating device status: ' + err.message);
     }
 }
 

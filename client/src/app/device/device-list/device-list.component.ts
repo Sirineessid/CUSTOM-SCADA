@@ -206,7 +206,8 @@ export class DeviceListComponent implements OnInit, AfterViewInit {
     }
 
     onAddTag() {
-        if (this.deviceSelected.type === DeviceType.OPCUA || this.deviceSelected.type === DeviceType.BACnet || this.deviceSelected.type === DeviceType.WebAPI) {
+        if (this.deviceSelected.type === DeviceType.OPCUA || this.deviceSelected.type === DeviceType.BACnet ||
+            this.deviceSelected.type === DeviceType.WebAPI || this.deviceSelected.type === DeviceType.PostgreSQL) {
             this.addOpcTags();
         } else if (this.deviceSelected.type === DeviceType.MQTTclient) {
             this.editTopics();
@@ -223,6 +224,12 @@ export class DeviceListComponent implements OnInit, AfterViewInit {
             });
             return;
         }
+        if (this.deviceSelected.type === DeviceType.PostgreSQL) {
+            this.tagPropertyService.addTagsPostgreSQL(this.deviceSelected, this.tagsMap).subscribe(result => {
+                this.bindToTable(this.deviceSelected.tags);
+            });
+            return;
+        }
         if (this.deviceSelected.type === DeviceType.BACnet) {
             this.tagPropertyService.editTagPropertyBacnet(this.deviceSelected, this.tagsMap).subscribe(result => {
                 this.bindToTable(this.deviceSelected.tags);
@@ -234,6 +241,14 @@ export class DeviceListComponent implements OnInit, AfterViewInit {
                 this.bindToTable(this.deviceSelected.tags);
             });
             return;
+        }
+    }
+
+    onScanSnmpTag() {
+        if (this.deviceSelected.type === DeviceType.SNMP) {
+            this.tagPropertyService.scanTagsSnmp(this.deviceSelected).subscribe(result => {
+                this.bindToTable(this.deviceSelected.tags);
+            });
         }
     }
 
@@ -316,8 +331,8 @@ export class DeviceListComponent implements OnInit, AfterViewInit {
         if (type === DeviceType.SiemensS7 || type === DeviceType.ModbusTCP || type === DeviceType.ModbusRTU ||
             type === DeviceType.internal || type === DeviceType.EthernetIP || type === DeviceType.GenericEthernetIP ||
             type === DeviceType.OmronEthernetIP || type === DeviceType.FuxaServer ||
-            type === DeviceType.OPCUA || type === DeviceType.GPIO || type === DeviceType.ADSclient ||
-            type === DeviceType.WebCam || type === DeviceType.MELSEC || type === DeviceType.REDIS) {
+            type === DeviceType.OPCUA || type === DeviceType.PostgreSQL || type === DeviceType.GPIO || type === DeviceType.ADSclient ||
+            type === DeviceType.WebCam || type === DeviceType.MELSEC || type === DeviceType.REDIS || type === DeviceType.SNMP) {
             return true;
         } else if (type === DeviceType.MQTTclient) {
             if (tag && tag.options && (tag.options.pubs || tag.options.subs)) {
@@ -377,6 +392,13 @@ export class DeviceListComponent implements OnInit, AfterViewInit {
             });
             return;
         }
+        if (this.deviceSelected.type === DeviceType.PostgreSQL) {
+            this.tagPropertyService.editTagPropertyOpcUa(this.deviceSelected, tag, checkToAdd).subscribe(result => {
+                this.tagsMap[tag.id] = tag;
+                this.bindToTable(this.deviceSelected.tags);
+            });
+            return;
+        }
         if (this.deviceSelected.type === DeviceType.ADSclient) {
             this.tagPropertyService.editTagPropertyADSclient(this.deviceSelected, tag, checkToAdd).subscribe(result => {
                 this.tagsMap[tag.id] = tag;
@@ -407,6 +429,13 @@ export class DeviceListComponent implements OnInit, AfterViewInit {
         }
         if (this.deviceSelected.type === DeviceType.REDIS) {
             this.tagPropertyService.editTagPropertyRedis(this.deviceSelected, tag, checkToAdd).subscribe(result => {
+                this.tagsMap[tag.id] = tag;
+                this.bindToTable(this.deviceSelected.tags);
+            });
+            return;
+        }
+        if (this.deviceSelected.type === DeviceType.SNMP) {
+            this.tagPropertyService.editTagPropertySnmp(this.deviceSelected, tag, checkToAdd).subscribe(result => {
                 this.tagsMap[tag.id] = tag;
                 this.bindToTable(this.deviceSelected.tags);
             });

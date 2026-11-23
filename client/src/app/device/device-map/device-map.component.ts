@@ -142,6 +142,7 @@ export class DeviceMapComponent implements OnInit, OnDestroy, AfterViewInit {
             }, error => {
             });
             this.plugins.push(DeviceType.WebAPI);
+            this.plugins.push(DeviceType.PostgreSQL);
             this.plugins.push(DeviceType.MQTTclient);
             this.plugins.push(DeviceType.internal);
         } else {
@@ -418,6 +419,9 @@ export class DeviceMapComponent implements OnInit, OnDestroy, AfterViewInit {
                 if (device.property.slaveid) {
                     result += device.property.slaveid;
                 }
+            } else if (device.type === DeviceType.PostgreSQL) {
+                result = 'PostgreSQL  ' + (device.property.address || '') +
+                    (device.property.port ? ':' + device.property.port : '');
             }
         }
         return result;
@@ -516,6 +520,7 @@ export class DeviceMapComponent implements OnInit, OnDestroy, AfterViewInit {
                         if (device.type === DeviceType.MELSEC) {
                             device.property.ascii = tempdevice.property.ascii;
                             device.property.octalIO = tempdevice.property.octalIO;
+                            device.property.frame = tempdevice.property.frame;
                         }
                         if (tempdevice.property.connectionOption) {
                             device.property.connectionOption = tempdevice.property.connectionOption;
@@ -555,12 +560,14 @@ export class DeviceMapComponent implements OnInit, OnDestroy, AfterViewInit {
         return <Device[]>Object.values(this.devices).filter((d: Device) => d.type !== DeviceType.WebAPI
             && d.type !== DeviceType.FuxaServer
             && d.type !== DeviceType.ODBC
+            && d.type !== DeviceType.PostgreSQL
             && d.type !== DeviceType.internal);
     }
 
     flows(): Device[] {
         return <Device[]>Object.values(this.devices).filter((d: Device) => d.type === DeviceType.WebAPI
             || d.type === DeviceType.ODBC
+            || d.type === DeviceType.PostgreSQL
             || d.type === DeviceType.internal);
     }
 }

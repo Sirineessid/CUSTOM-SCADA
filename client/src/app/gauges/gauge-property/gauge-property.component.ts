@@ -4,14 +4,15 @@ import { MAT_DIALOG_DATA as MAT_DIALOG_DATA, MatDialog as MatDialog, MatDialogRe
 import { FlexHeadComponent } from './flex-head/flex-head.component';
 import { FlexEventComponent } from './flex-event/flex-event.component';
 import { FlexActionComponent } from './flex-action/flex-action.component';
-import { GaugeProperty, GaugeSettings, GaugeShapeStyle, IPropertyVariable, View, WidgetProperty } from '../../_models/hmi';
+import { ButtonActionMode, GaugeProperty, GaugeSettings, GaugeShapeStyle, IPropertyVariable, View, WidgetProperty } from '../../_models/hmi';
 import { Script } from '../../_models/script';
 import { PropertyType } from './flex-input/flex-input.component';
 import { PermissionData, PermissionDialogComponent } from './permission-dialog/permission-dialog.component';
 import { SettingsService } from '../../_services/settings.service';
-import { Device } from '../../_models/device';
+import { Device, DeviceType, DevicesUtils } from '../../_models/device';
 import { HtmlButtonComponent } from '../controls/html-button/html-button.component';
 import { ShapeStyleHelper } from './custom-tabs/shape-style.helper';
+import { HtmlSelectComponent } from '../controls/html-select/html-select.component';
 
 @Component({
     selector: 'gauge-property',
@@ -99,6 +100,7 @@ export class GaugePropertyComponent implements AfterViewInit {
 
     onOkClick(): void {
         if (this.isWidget()) {
+            this.flexHead?.getProperty();
             this.data.settings.property = this.property;
         } else {
             this.data.settings.property = this.flexHead?.getProperty();
@@ -132,6 +134,32 @@ export class GaugePropertyComponent implements AfterViewInit {
         this.flexAction.onAddAction();
     }
 
+    onOptionSourceChanged(event: any) {
+        this.property.optionSourceTagId = event?.variableId || null;
+        if (!this.property.optionSourceTagId) {
+            this.property.optionRefreshTagId = null;
+        }
+        this.cdr.markForCheck();
+    }
+
+    onOptionRefreshTagChanged(event: any) {
+        this.property.optionRefreshTagId = event?.variableId || null;
+        this.cdr.markForCheck();
+    }
+
+    isSelectGauge() {
+        const type = this.data.settings?.type;
+        return typeof type === 'string' && type.startsWith(HtmlSelectComponent.TypeTag);
+    }
+
+    isSelectOptionsConfigurationValid() {
+        if (!this.isSelectGauge() || !this.property.optionSourceTagId) {
+            return true;
+        }
+        const sourceDevice = DevicesUtils.getDeviceFromTagId(this.data.devices || [], this.property.optionSourceTagId);
+        return sourceDevice?.type === DeviceType.PostgreSQL && !!this.property.optionRefreshTagId;
+    }
+
     onRangeViewToggle() {
         this.flexHead.onRangeViewToggle(this.slideView);
     }
@@ -161,6 +189,11 @@ export class GaugePropertyComponent implements AfterViewInit {
 
     isButton() {
         return this.data.settings?.type === HtmlButtonComponent.TypeTag;
+    }
+
+    isButtonActionInvalid() {
+        const action = this.property?.buttonAction;
+        return this.isButton() && !!action && action.mode !== ButtonActionMode.none && !HtmlButtonComponent.isButtonActionValid(action);
     }
 
     isAlarmToShow() {

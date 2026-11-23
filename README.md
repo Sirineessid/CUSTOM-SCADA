@@ -2,7 +2,7 @@
 # FUXA
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-online-brightgreen)](https://frangoteam.github.io/FUXA/)
-[![Node](https://img.shields.io/badge/node-18%20LTS-green)](https://nodejs.org/)
+[![Node](https://img.shields.io/badge/node-22%20LTS-green)](https://nodejs.org/)
 [![GitHub stars](https://img.shields.io/github/stars/frangoteam/FUXA?style=flat)](https://github.com/frangoteam/FUXA/stargazers)
 [![Docker Pulls](https://img.shields.io/docker/pulls/frangoteam/fuxa)](https://hub.docker.com/r/frangoteam/fuxa)
 [![npm downloads](https://img.shields.io/npm/dt/%40frangoteam/fuxa?label=npm%20downloads)](https://www.npmjs.com/package/@frangoteam/fuxa)
@@ -21,10 +21,10 @@ It allows you to build modern dashboards, connect industrial devices and monitor
 
 ## ✨ Features
 - **Industrial protocol support**
-  Modbus RTU/TCP, Siemens S7 Protocol, OPC-UA, BACnet IP, MQTT, Ethernet/IP (Allen Bradley), ODBC, ADSclient, Gpio (Raspberry), WebCam, MELSEC, Redis
+  Modbus RTU/TCP, Siemens S7 Protocol, OPC-UA, BACnet IP, MQTT, Ethernet/IP (Allen Bradley), ODBC, PostgreSQL, ADSclient, Gpio (Raspberry), WebCam, MELSEC, Redis, SNMP
 - **Database and data storage**
   Built-in data historian (DAQ) with support for SQLite, InfluxDB and other time-series databases.
-  External integrations via ODBC and Redis.
+  External integrations via ODBC, PostgreSQL and Redis.
 - **SCADA/HMI Web-Editor**
   Engineering and Design completely web-based
 - **Cross-platform architecture**
@@ -87,11 +87,11 @@ Open up a browser (better Chrome) and navigate to http://localhost:1881
 [Download the latest release](https://github.com/frangoteam/FUXA/releases) and unpack it
 
 You need to have installed [Node.js](https://nodejs.org/en/about/previous-releases)
-- Recommended: Node.js 18 LTS
+- Recommended: Node.js 22 LTS
 
 **Note** Starting from FUXA 1.2.7, Node.js 14 and older versions are not supported due to upstream dependency updates.
 
-**WARNING** On Linux systems (especially Raspberry Pi), installing native dependencies with Node.js 18 may require additional build tools.
+**WARNING** On Linux systems (especially Raspberry Pi), installing native dependencies may require additional build tools.
 If you do not intend to use specific features, you can safely remove them from ```server/package.json```:
 - Remove ```node-snap7``` if you do not need Siemens S7 communication
 - Remove ```odbc``` if you do not need external database connectivity
@@ -104,12 +104,18 @@ npm start
 
 Open up a browser (better Chrome) and navigate to http://localhost:1881
 
+### PostgreSQL device
+
+PostgreSQL is available as a device type when running FUXA from this source. Add the device with its host, port, PostgreSQL username and password, then use **Add tag** to browse databases, tables and columns. Credentials are stored using FUXA's device-security storage. Use a PostgreSQL role with read-only access to the databases and tables FUXA should browse.
+
+Column tags read the value from one row using `LIMIT 1`. Set **Order by column** to a column present in every selected table (for example, a timestamp or increasing ID) to consistently select the latest row. If it is unset, PostgreSQL does not guarantee which row is returned. The driver is read-only and follows the device polling interval.
+
 ### 3° Option - Install from [NPM](https://www.npmjs.com/package/@frangoteam/fuxa)
 
 You need to have installed [Node.js](https://nodejs.org/en/about/previous-releases)
-- Recommended: Node.js 18 LTS
+- Recommended: Node.js 22 LTS
 
-**WARNING** In linux with nodejs Version 18 the installation could be a challenge.
+**WARNING** In Linux, installing native dependencies may be challenging.
 If you don't intend communicate with Siemens PLCs via S7 (node-snap7 library) you can install from [NPM @frangoteam/fuxa-min](https://www.npmjs.com/package/@frangoteam/fuxa-min)
 
 ```
@@ -240,6 +246,18 @@ For full contribution guidelines (code and documentation), please read:
 
 ## 💬 Let us know!
 We’d be really happy if you send us your own shapes in order to collect a library to share it with others. Just send an email to info@frangoteam.org and do let us know if you have any questions or suggestions regarding our work.
+
+## PostgreSQL support
+
+FUXA includes a native PostgreSQL device for browsing databases, tables, and columns, reading table rows and distinct tag values, and using database-backed select options. Configure the device connection in the editor; device credentials are stored with the project configuration.
+
+The PostgreSQL Explorer integration adds an administrator-only database/table picker for custom widgets:
+
+- The explorer endpoints are available at `/api/dbexplorer/databases` and `/api/dbexplorer/tables?db=DATABASE`.
+- The standalone picker is served at `http://localhost:1881/_widgets/dbexplorer.html`.
+- The two-dropdown control is available from **Editor → Widgets → controls**.
+
+Set `PG_USER` and `PG_PASSWORD` for the FUXA server process. `PG_HOST` defaults to `127.0.0.1` and `PG_PORT` defaults to `5432`. Use a PostgreSQL role with read-only access and permission to connect to the databases being listed. Do not commit credentials.
 
 ## <a href="https://discord.gg/WZhxz9uHh4" target="_blank" > <img src="https://skillicons.dev/icons?i=discord" alt=""></a>
 

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FUXA PostgreSQL Explorer</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, sans-serif; color: #172033; background: #f3f4f6; }
+    body { box-sizing: border-box; margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    main { box-sizing: border-box; width: min(100%, 520px); padding: 28px; border: 1px solid #d1d5db; border-radius: 12px; background: white; box-shadow: 0 12px 30px #17203314; }
+    h1 { margin: 0 0 8px; font-size: 1.4rem; }
+    p { margin: 0 0 24px; color: #596579; }
+    label { display: block; margin: 16px 0 6px; font-weight: 600; }
+    select, button { box-sizing: border-box; width: 100%; min-height: 42px; padding: 8px 10px; border: 1px solid #9ca3af; border-radius: 6px; background: white; font: inherit; }
+    button { margin-top: 20px; border-color: #2563eb; background: #2563eb; color: white; cursor: pointer; font-weight: 600; }
+    button:disabled { cursor: wait; opacity: .65; }
+    #status { min-height: 1.4em; margin: 14px 0 0; color: #596579; }
+    #status.error { color: #b91c1c; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>PostgreSQL Explorer</h1>
+    <p>Choose a database to load its tables.</p>
+    <label for="database">Database</label>
+    <select id="database" aria-label="Database" disabled>
+      <option value="">Loading databases...</option>
+    </select>
+    <label for="table">Table</label>
+    <select id="table" aria-label="Table" disabled>
+      <option value="">Select a database first...</option>
+    </select>
+    <button id="refresh" type="button">Refresh databases</button>
+    <div id="status" role="status" aria-live="polite"></div>
+  </main>
+  <script>
+    const databaseSelect = document.getElementById('database');
+    const tableSelect = document.getElementById('table');
+    const refreshButton = document.getElementById('refresh');
+    const status = document.getElementById('status');
+    let tableRequest = 0;
+
+    function setOptions(select, placeholder, values) {
+      select.replaceChildren(new Option(placeholder, ''));
+      values.forEach(value => select.add(new Option(value, value)));
+    }
+
+    async function getJson(url) {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('Request failed with HTTP ' + response.status);
+      }
+      return response.json();
+    }
+
+    async function loadTables() {
+      const request = ++tableRequest;
+      const database = databaseSelect.value;
+      tableSelect.disabled = true;
+      status.textContent = '';
+      status.classList.remove('error');
+
+      if (!database) {
+        setOptions(tableSelect, 'Select a database first...', []);
+        return;
+      }
+
+      setOptions(tableSelect, 'Loading tables...', []);
+      try {
+        const tables = await getJson(
+          '/api/dbexplorer/tables?db=' + encodeURIComponent(database)
+        );
+        if (request !== tableRequest) return;
+        if (!Array.isArray(tables) || !tables.every(table => typeof table === 'string')) {
+          throw new Error('The server returned an invalid table list.');
+        }
+        setOptions(tableSelect, tables.length ? 'Select a table...' : 'No tables found', tables);
+        tableSelect.disabled = tables.length === 0;
+        status.textContent = tables.length ? tables.length + ' table(s) found.' : 'No tables found.';
+      } catch (error) {
+        if (request !== tableRequest) return;
+        setOptions(tableSelect, 'Unable to load tables', []);
+        status.textContent = error.message;
+        status.classList.add('error');
+      }
+    }
+
+    async function loadDatabases() {
+      refreshButton.disabled = true;
+      databaseSelect.disabled = true;
+      tableSelect.disabled = true;
+      setOptions(databaseSelect, 'Loading databases...', []);
+      setOptions(tableSelect, 'Select a database first...', []);
+      status.textContent = '';
+      status.classList.remove('error');
+
+      try {
+        const databases = await getJson('/api/dbexplorer/databases');
+        if (!Array.isArray(databases) || !databases.every(database => typeof database === 'string')) {
+          throw new Error('The server returned an invalid database list.');
+        }
+        setOptions(databaseSelect, 'Select a database...', databases);
+        databaseSelect.disabled = databases.length === 0;
+        if (databases.length === 0) {
+          setOptions(databaseSelect, 'No databases found', []);
+          status.textContent = 'No databases found.';
+          return;
+        }
+        await loadTables();
+      } catch (error) {
+        setOptions(databaseSelect, 'Unable to load databases', []);
+        status.textContent = error.message;
+        status.classList.add('error');
+      } finally {
+        refreshButton.disabled = false;
+      }
+    }
+
+    databaseSelect.addEventListener('change', loadTables);
+    refreshButton.addEventListener('click', loadDatabases);
+    loadDatabases();
+  </script>
+</body>
+</html>

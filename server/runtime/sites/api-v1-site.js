@@ -62,7 +62,10 @@ function router(runtime, settings, siteId) {
         const current = runtime.devices.getTagValue(tag.id, true);
         return {
             value: current ? current.value : null,
-            timestamp: current ? current.timestamp || current.ts || null : null
+            timestamp: current ? current.timestamp || current.ts || null : null,
+            sourceTimestamp: current ? current.sourceTimestamp || null : null,
+            quality: current ? current.quality || 'good' : 'unknown',
+            qualityTimestamp: current ? current.qualityTimestamp || null : null
         };
     };
 
@@ -74,6 +77,10 @@ function router(runtime, settings, siteId) {
                 `GET ${base}/config`, `GET|PUT ${base}/config/graphs`, `GET|PUT ${base}/config/history`, `POST ${base}/config/history/test`,
                 `GET ${base}/devices`, `GET ${base}/tags`, `GET ${base}/tags/{tag}`, `GET ${base}/values`, `GET ${base}/history`,
                 `GET ${base}/curves`, `GET ${base}/curves/{graph_id}/data`,
+                `GET ${base}/maintenance`, `GET ${base}/maintenance/metrics`,
+                `POST|PUT|DELETE ${base}/maintenance/assets`, `POST ${base}/maintenance/assets/{asset_id}/documents`,
+                `POST|PUT|DELETE ${base}/maintenance/work-orders`, `POST|PUT|DELETE ${base}/maintenance/schedules`,
+                `POST|PUT|DELETE ${base}/maintenance/parts`,
                 `GET ${base}/alarms`, `GET ${base}/alarms/history`, `POST ${base}/alarms/{alarm_id}/ack`, `POST ${base}/alarms/ack`
             ]
         }, meta());
@@ -738,6 +745,8 @@ function router(runtime, settings, siteId) {
         await versions.restore(version.id);
         send(res, Object.assign(versionInfo(version), { restored: true }), meta());
     }));
+
+    app.use('/maintenance', require('./maintenance').router(runtime, settings, siteId));
 
     // unknown service of the API v1
     app.use(h(req => {

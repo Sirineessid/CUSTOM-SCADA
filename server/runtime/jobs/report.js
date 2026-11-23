@@ -1,12 +1,12 @@
 /*
-* Report: get data, create/send/store pdf
+* Report: get data, create/send/store PDF and Excel workbooks
 */
 const utils = require('../utils');
 const Pdfmake = require('pdfmake');
+const ExcelJS = require('exceljs');
 var fs = require('fs')
 var path = require('path');
 var imageGenerator = require('./helper/image-generator');
-const { time } = require('console');
 
 'use strict';
 
@@ -16,6 +16,7 @@ function Report(_property, _runtime) {
     var logger = runtime.logger;
     var currentTime = 0;
     var lastExecuted;
+    var reportDataCache = new WeakMap();
 
     this.execute = function (time, force) {
         currentTime = time;
@@ -24,10 +25,11 @@ function Report(_property, _runtime) {
                 if (!_isToExecute(time) && !force) {
                     resolve(true);
                 } else {
-                    await _createPdfBinary().then(filepath => {
+                    reportDataCache = new WeakMap();
+                    await _createReportFiles().then(files => {
                         if (property.receiver) {
                             let subject = `Report ${property.name}`;
-                            let attachments = { path: filepath };
+                            let attachments = [{ path: files.pdf }, { path: files.xlsx }];
                             runtime.notificatorMgr.sendMailMessage(null, property.receiver, subject, '', null, attachments).then(function () {
                                 logger.info(`report.sended.successful: ${new Date()} ${property.receiver} ${property.name}`);
                             }).catch(function (senderr) {
@@ -35,7 +37,7 @@ function Report(_property, _runtime) {
                             });
                         }
                         lastExecuted = currentTime;
-                        resolve(filepath);
+                        resolve(files.pdf);
                     }).catch(function (err) {
                         reject(err);
                     });
@@ -89,17 +91,244 @@ function Report(_property, _runtime) {
             let pdfmake = new Pdfmake(fonts);
             await _getPdfContent(property).then(content => {
                 let docPath = path.join(runtime.settings.reportsDir,`${property.name}_${utils.getDate(new Date())}.pdf`);
-                pdfDoc = pdfmake.createPdfKitDocument(content, {});
+                const pdfDoc = pdfmake.createPdfKitDocument(content, {});
                 const stream = fs.createWriteStream(docPath);
                 pdfDoc.pipe(stream);
                 pdfDoc.end();
-                stream.on("finish", function() {
+                stream.once('error', reject);
+                stream.once('finish', function() {
                     resolve(docPath);
                 });
             }).catch(function (err) {
                 reject(err);
             });
         });
+    }
+
+    var _createReportFiles = async function () {
+        const pdfPath = await _createPdfBinary();
+        try {
+            const excelPath = await _createExcelBinary();
+            return { pdf: pdfPath, xlsx: excelPath };
+        } catch (err) {
+            try {
+                fs.unlinkSync(pdfPath);
+            } catch (cleanupError) {
+                logger.warn(`report.cleanup.failed: ${cleanupError}`);
+            }
+            throw err;
+        }
+    }
+
+    var _createExcelBinary = async function () {
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'FUXA';
+        workbook.created = new Date();
+        workbook.modified = new Date();
+        const summary = workbook.addWorksheet('Summary');
+        summary.addRow([property.name]);
+        summary.addRow([new Date(currentTime || Date.now())]);
+        summary.getRow(1).font = { bold: true, size: 16 };
+
+        let tableCount = 0, alarmCount = 0, chartCount = 0;
+        for (const item of (property.content && property.content.items) || []) {
+            if (item.type === 'text') {
+                summary.addRow([item.text || '']);
+            } else if (item.type === 'table') {
+                const data = await _getTableData(item);
+                const worksheet = workbook.addWorksheet(`Table ${++tableCount}`);
+                worksheet.addRow([property.name]);
+                worksheet.addRow([_formatRange(data.currentRange)]);
+                if (data.previousRange) {
+                    worksheet.addRow([`Comparison: ${_formatRange(data.previousRange)}`]);
+                }
+                const header = worksheet.addRow(data.headers);
+                header.font = { bold: true };
+                _getExcelTableRows(item, data).forEach(row => worksheet.addRow(row));
+                _formatWorksheet(worksheet, header.number);
+            } else if (item.type === 'alarms') {
+                const data = await _getAlarmData(item);
+                const worksheet = workbook.addWorksheet(`Alarms ${++alarmCount}`);
+                worksheet.addRow([property.name]);
+                worksheet.addRow([_formatRange(data.timeRange)]);
+                const header = worksheet.addRow(data.headers);
+                header.font = { bold: true };
+                data.rows.forEach(row => worksheet.addRow(row));
+                _formatWorksheet(worksheet, header.number);
+            } else if (item.type === 'chart') {
+                const timeRange = _getDateRange(item.range);
+                const ids = item.chart.lines.map(line => line.id);
+                const values = await _getChartData(item);
+                const worksheet = workbook.addWorksheet(`Chart ${++chartCount}`);
+                worksheet.addRow([property.name]);
+                worksheet.addRow([_formatRange(timeRange)]);
+                const lines = item.chart.lines;
+                const header = worksheet.addRow(['Timestamp', ...lines.map(line => line.name || line.id)]);
+                header.font = { bold: true };
+                const rowsByTime = new Map();
+                lines.forEach((line, index) => {
+                    (values && values[line.id] || []).forEach(point => {
+                        const timestamp = new Date(point.x).getTime();
+                        if (!rowsByTime.has(timestamp)) {
+                            rowsByTime.set(timestamp, [new Date(timestamp), ...lines.map(() => null)]);
+                        }
+                        rowsByTime.get(timestamp)[index + 1] = point.y;
+                    });
+                });
+                Array.from(rowsByTime.keys()).sort((a, b) => a - b).forEach(timestamp => worksheet.addRow(rowsByTime.get(timestamp)));
+                _formatWorksheet(worksheet, header.number);
+            }
+        }
+
+        const filePath = path.join(runtime.settings.reportsDir, `${property.name}_${utils.getDate(new Date())}.xlsx`);
+        await workbook.xlsx.writeFile(filePath);
+        return filePath;
+    }
+
+    var _formatWorksheet = function (worksheet, headerRow) {
+        worksheet.views = [{ state: 'frozen', ySplit: headerRow }];
+        worksheet.columns.forEach(column => { column.width = Math.min(Math.max(column.width || 14, 14), 40); });
+        worksheet.autoFilter = {
+            from: { row: headerRow, column: 1 },
+            to: { row: headerRow, column: worksheet.columnCount }
+        };
+    }
+
+    var _formatRange = function (range) {
+        return `${range.begin.toLocaleString()} - ${range.end.toLocaleString()}`;
+    }
+
+    var _getExcelTableRows = function (item, data) {
+        return data.rows.map(row => {
+            const result = [];
+            let sourceIndex = 0;
+            item.columns.forEach(col => {
+                if (col.type === 0) {
+                    result.push(row[sourceIndex++] || '');
+                } else if (data.previousRange) {
+                    result.push(
+                        _excelValue(row[sourceIndex++], col.tag),
+                        _excelValue(row[sourceIndex++], col.tag),
+                        row[sourceIndex++] === '' ? null : row[sourceIndex - 1]
+                    );
+                } else {
+                    result.push(_excelValue(row[sourceIndex++], col.tag));
+                }
+            });
+            return result;
+        });
+    }
+
+    var _excelValue = function (value, tag) {
+        if (value === null || value === undefined || value === '') {
+            return null;
+        }
+        const type = String(tag && tag.type || '');
+        if (/^(bool|boolean)$/i.test(type)) {
+            if (value === true || value === 1 || String(value).toLowerCase() === 'true') {
+                return true;
+            }
+            if (value === false || value === 0 || String(value).toLowerCase() === 'false') {
+                return false;
+            }
+        }
+        if (/^(?:u?int|u?dint|word|dword|byte|float|double|number|real|decimal)/i.test(type)) {
+            const numeric = Number(value);
+            if (Number.isFinite(numeric)) {
+                return numeric;
+            }
+        }
+        return value;
+    }
+
+    var _getPreviousDateRange = function (type, currentRange) {
+        if (type === ReportDateRangeType.day) {
+            const begin = new Date(currentRange.begin);
+            begin.setDate(begin.getDate() - 1);
+            return {
+                begin: new Date(begin.getFullYear(), begin.getMonth(), begin.getDate()),
+                end: new Date(begin.getFullYear(), begin.getMonth(), begin.getDate(), 23, 59, 59, 999)
+            };
+        }
+        if (type === ReportDateRangeType.week) {
+            const begin = new Date(currentRange.begin);
+            begin.setDate(begin.getDate() - 7);
+            const end = new Date(currentRange.end);
+            end.setDate(end.getDate() - 7);
+            return { begin, end };
+        }
+        if (type === ReportDateRangeType.month) {
+            return {
+                begin: new Date(currentRange.begin.getFullYear(), currentRange.begin.getMonth() - 1, 1),
+                end: new Date(currentRange.begin.getFullYear(), currentRange.begin.getMonth(), 0, 23, 59, 59, 999)
+            };
+        }
+        return null;
+    }
+
+    var _difference = function (current, previous, tag) {
+        if (current === undefined || current === null || current === '' ||
+            previous === undefined || previous === null || previous === '') {
+            return '';
+        }
+        const type = String(tag && tag.type || '');
+        if (type && !/^(?:u?int|u?dint|word|dword|byte|float|double|number|real|decimal)/i.test(type)) {
+            return '';
+        }
+        const currentNumber = Number(current), previousNumber = Number(previous);
+        return Number.isFinite(currentNumber) && Number.isFinite(previousNumber)
+            ? currentNumber - previousNumber : '';
+    }
+
+    var _getAlarmData = function (item) {
+        if (!reportDataCache.has(item)) {
+            reportDataCache.set(item, _loadAlarmData(item));
+        }
+        return reportDataCache.get(item);
+    }
+
+    var _loadAlarmData = async function (item) {
+        const timeRange = _getDateRange(item.range);
+        const selectedProperties = Object.keys(item.property).filter(prop => item.property[prop]);
+        const headers = selectedProperties.map(prop => item.propertyText[prop] || prop);
+        const alarms = await runtime.alarmsMgr.getAlarmsHistory({
+            start: timeRange.begin.getTime(), end: timeRange.end.getTime()
+        }, -1);
+        const filteredAlarms = (alarms || []).filter(alarm =>
+            item.priority[alarm.type] &&
+            (!item.alarmFilter || !item.alarmFilter.length || item.alarmFilter.includes(alarm.name))
+        );
+        const valueFor = (alarm, prop) => {
+            if ((prop === 'ontime' || prop === 'offtime' || prop === 'acktime') && alarm[prop]) {
+                return utils.getFormatDate(new Date(Number(alarm[prop])), 'ymd');
+            }
+            if (prop === 'status') {
+                return item.statusText[alarm.status] || alarm.status;
+            }
+            if (prop === 'type') {
+                return item.priorityText[alarm.type] || alarm.type;
+            }
+            return alarm[prop] === undefined || alarm[prop] === null ? '' : alarm[prop];
+        };
+        const rows = filteredAlarms.map(alarm => selectedProperties.map(prop => valueFor(alarm, prop)));
+        const pdfRows = filteredAlarms.length
+            ? filteredAlarms.map(alarm => selectedProperties.map(prop => ({
+                text: valueFor(alarm, prop),
+                style: [{ fillColor: alarm.bkcolor, color: alarm.color }]
+            })))
+            : [headers.map(() => ({ text: '', style: [{ alignment: 'left' }] }))];
+        return { timeRange, headers, rows, pdfRows };
+    }
+
+    var _getChartData = function (item) {
+        if (!reportDataCache.has(item)) {
+            const timeRange = _getDateRange(item.range);
+            const ids = item.chart.lines.map(line => line.id);
+            reportDataCache.set(item, runtime.daqStorage.getNodesValues(
+                ids, timeRange.begin.getTime(), timeRange.end.getTime(), null
+            ));
+        }
+        return reportDataCache.get(item);
     }
 
     var _getPdfContent = function (report) {
@@ -116,12 +345,13 @@ function Report(_property, _runtime) {
                     if (item.type === 'text') {
                         docDefinition['content'].push({ text: item.text, style: [{ alignment: item.align, fontSize: item.size }] });
                     } else if (item.type === 'table') {
-                        await _getTableContent(item).then(itemTable => {
-                            const tableDateRange = _getDateRange(item.range);
-                            docDefinition['content'].push({ text: `${tableDateRange.begin.toLocaleDateString()} - ${tableDateRange.end.toLocaleDateString()}`,
+                        const data = await _getTableData(item);
+                        const itemTable = _getTableContent(item, data);
+                        docDefinition['content'].push({ text: data.previousRange
+                                ? `${_formatRange(data.currentRange)} | Comparaison : ${_formatRange(data.previousRange)}`
+                                : _formatRange(data.currentRange),
                                 style: [{ fontSize: item.size }] });
-                            docDefinition['content'].push(itemTable);
-                        });
+                        docDefinition['content'].push(itemTable);
                     } else if (item.type === 'alarms') {
                         await _getAlarmsContent(item).then(itemAlarms => {
                             const alarmsDateRange = _getDateRange(item.range);
@@ -142,61 +372,103 @@ function Report(_property, _runtime) {
         });
     }
 
-    var _getTableContent = function (item) {
-        return new Promise(async function (resolve, reject) {
-            try {
-                let content = { layout: 'lightHorizontalLines', fontSize: item.size }; // optional
-                let header = item.columns.map(col => {
-                    return { text: col.label || col.tag.label || col.tag.name, bold: true, style: [{ alignment: col.align }] }
-                });
-                //item.columns.map(col => col.tag.address || '');
-                let values = [];
-                let tagsids = item.columns.filter(col => col.type !== 0).map(col => col.tag.id);
-                let fncs = item.columns.filter(col => col.type !== 0).map(col => col.function);
-                let formats = item.columns.filter(col => col.type !== 0).map(col => runtime.devices.getTagFormat(col.tag.id));
-                let timeRange = _getDateRange(item.range);
-                let options = { interval: item.interval, functions: fncs, formats: formats };
-                await runtime.daqStorage.getNodesValues(tagsids, timeRange.begin.getTime(), timeRange.end.getTime(), options).then(result => {
-                    if (!result || !result.length) {
-                        values = [item.columns.map(col => { return {text: ''}})];
-                    } else {
-                        values = result;
-                    }
-                }).catch(function (err) {
-                    values = [item.columns.map(col => { return {text: 'ERROR'}})];
-                });
-                content['table'] = {
-                    // headers are automatically repeated if the table spans over multiple pages
-                    // you can declare how many rows should be treated as headers
-                    headerRows: 1,
-                    widths: item.columns.map(col => col.width), //[ '*', 'auto', 100],
-                    body: [
-                        header,
-                        ...values
-                    ]
-                }
-                resolve(content);
-            } catch (err) {
-                reject(err);
+    var _getTableData = function (item) {
+        if (!reportDataCache.has(item)) {
+            reportDataCache.set(item, _loadTableData(item));
+        }
+        return reportDataCache.get(item);
+    }
+
+    var _loadTableData = async function (item) {
+        const currentRange = _getDateRange(item.range);
+        const tagColumns = item.columns.filter(col => col.type !== 0);
+        const tagIds = tagColumns.map(col => col.tag.id);
+        const options = {
+            interval: item.interval,
+            functions: tagColumns.map(col => col.function),
+            formats: tagColumns.map(col => runtime.devices.getTagFormat(col.tag.id))
+        };
+        const currentRows = await runtime.daqStorage.getNodesValues(
+            tagIds, currentRange.begin.getTime(), currentRange.end.getTime(), options
+        );
+        const currentValues = currentRows && currentRows.length
+            ? currentRows : [item.columns.map(() => '')];
+        const previousRange = item.comparePreviousPeriod ? _getPreviousDateRange(item.range, currentRange) : null;
+        if (!previousRange) {
+            return {
+                headers: item.columns.map(col => col.label || col.tag.label || col.tag.name),
+                rows: currentValues,
+                currentRange,
+                previousRange: null
+            };
+        }
+
+        const previousRows = await runtime.daqStorage.getNodesValues(
+            tagIds, previousRange.begin.getTime(), previousRange.end.getTime(), options
+        );
+        const previousValues = previousRows || [];
+        const headers = [];
+        item.columns.forEach(col => {
+            const label = col.label || col.tag.label || col.tag.name;
+            if (col.type === 0) {
+                headers.push(label);
+            } else {
+                headers.push(`${label} (current)`, `${label} (previous)`, `${label} (difference)`);
             }
         });
+
+        const rowCount = Math.max(currentValues.length, previousValues.length);
+        const rows = [];
+        for (let rowIndex = 0; rowIndex < rowCount; rowIndex++) {
+            const currentRow = currentValues[rowIndex] || [];
+            const previousRow = previousValues[rowIndex] || [];
+            const row = [];
+            let currentTagIndex = 0;
+            item.columns.forEach(col => {
+                if (col.type === 0) {
+                    row.push(currentRow[0] === undefined ? '' : currentRow[0]);
+                } else {
+                    const current = currentRow[currentTagIndex + 1];
+                    const previous = previousRow[currentTagIndex + 1];
+                    row.push(current === undefined ? '' : current, previous === undefined ? '' : previous, _difference(current, previous, col.tag));
+                    currentTagIndex++;
+                }
+            });
+            rows.push(row);
+        }
+        return { headers, rows, currentRange, previousRange };
+    }
+
+    var _getTableContent = function (item, data) {
+        const header = data.headers.map((label, index) => {
+            const col = item.columns[Math.min(index, item.columns.length - 1)];
+            return { text: label, bold: true, style: [{ alignment: col && col.align || 'left' }] };
+        });
+        const widths = [];
+        item.columns.forEach(col => {
+            if (col.type === 0) {
+                widths.push(col.width);
+            } else if (data.previousRange) {
+                widths.push(col.width, col.width, col.width);
+            } else {
+                widths.push(col.width);
+            }
+        });
+        return {
+            layout: 'lightHorizontalLines',
+            fontSize: item.size,
+            table: {
+                headerRows: 1,
+                widths,
+                body: [header, ...data.rows.map(row => row.slice())]
+            }
+        };
     }
 
     var _getChartContent = function (itemChart) {
         return new Promise(async function (resolve, reject) {
             try {
-                let values = {};
-                let tagsids = itemChart.chart.lines.map(line => line.id);
-                let timeRange = _getDateRange(itemChart.range);
-                await runtime.daqStorage.getNodesValues(tagsids, timeRange.begin.getTime(), timeRange.end.getTime(), null).then(result => {
-                    if (!result) {
-                        values = {};
-                    } else {
-                        values = result;
-                    }
-                }).catch(function (err) {
-                    values = {};
-                });
+                let values = await _getChartData(itemChart);
                 await _getChartImage(itemChart, values).then((imageData) => {
                     content = {
                         layout: 'lightHorizontalLines',
@@ -242,7 +514,7 @@ function Report(_property, _runtime) {
             yesterday.setDate(yesterday.getDate() - 1);
             return {
                 begin: new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()),
-                end: new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59)
+                end: new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate(), 23, 59, 59, 999)
             };
         } else if (dateRange === ReportDateRangeType.week) {
             var lastWeek = new Date(currentTime || Date.now());
@@ -251,13 +523,13 @@ function Report(_property, _runtime) {
             lastWeek = new Date(lastWeek.setDate(diff));
             return {
                 begin: new Date(lastWeek.getFullYear(), lastWeek.getMonth(), lastWeek.getDate()),
-                end: new Date(lastWeek.getFullYear(), lastWeek.getMonth(), lastWeek.getDate() + 6, 23, 59, 59)
+                end: new Date(lastWeek.getFullYear(), lastWeek.getMonth(), lastWeek.getDate() + 6, 23, 59, 59, 999)
             };
         } else if (dateRange === ReportDateRangeType.month) {
             var lastMonth = new Date(currentTime || Date.now());
             return {
                 begin: new Date(lastMonth.getFullYear(), lastMonth.getMonth() - 1, 1, 0, 0, 0),
-                end: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 0, 23, 59, 59)
+                end: new Date(lastMonth.getFullYear(), lastMonth.getMonth(), 0, 23, 59, 59, 999)
             };
         } else {
             return {
@@ -268,63 +540,18 @@ function Report(_property, _runtime) {
     }
 
     var _getAlarmsContent = function (item) {
-        return new Promise(async function (resolve, reject) {
-            try {
-                let content = { layout: 'lightHorizontalLines', fontSize: item.size }; // optional
-                let header = Object.values(item.propertyText).map(col => {
-                    return { text: col, bold: true, style: [{ alignment: 'left' }] }
-                });
-                let values = [];
-                const timeRange = _getDateRange(item.range);
-                const query = { start: timeRange.begin.getTime(), end: timeRange.end.getTime() };
-                await runtime.alarmsMgr.getAlarmsHistory(query, -1).then(result => {
-                    if (!result || !result.length) {
-                        values = [Object.values(item.propertyText).map(col => {
-                            return { text: '', style: [{ alignment: 'left' }] }
-                        })];
-                     } else {
-                        const property = Object.keys(item.property).filter(prop => { if (item.property[prop]) return prop; });
-                        values = result.filter(alr => {
-                            if (item.priority[alr.type] && (!item.alarmFilter || !!item.alarmFilter.find(name => name === alr.name))) {
-                                return alr;
-                            }
-                        });
-                        values = values.map(alr => {
-                            let row = [];
-                            property.forEach((prop) => {
-                                var text = '';
-                                if (prop === 'ontime' && alr.ontime) text = utils.getFormatDate(new Date(Number(alr.ontime)), 'ymd');
-                                else if (prop === 'offtime' && alr.offtime) text = utils.getFormatDate(new Date(Number(alr.offtime)), 'ymd');
-                                else if (prop === 'acktime' && alr.acktime) text = utils.getFormatDate(new Date(Number(alr.acktime)), 'ymd');
-                                else if (prop === 'text') text = alr.text;
-                                else if (prop === 'group') text = alr.group;
-                                else if (prop === 'userack') text = alr.userack;
-                                else if (prop === 'status') text = item.statusText[alr.status];
-                                else if (prop === 'type') text = item.priorityText[alr.type];
-                                row.push({text: text, style: [{fillColor: alr.bkcolor, color: alr.color}]});
-                            });
-                            return row;
-                        })
-                     }
-                }).catch(function (err) {
-                    console.error(err);
-                    values = [Object.values(item.propertyText).map(col => { return {text: 'ERROR'}})];
-                });
-                content['table'] = {
-                    // headers are automatically repeated if the table spans over multiple pages
-                    // you can declare how many rows should be treated as headers
-                    headerRows: 1,
-                    widths: Object.values(item.propertyText).map(col => '*'), //[ '*', 'auto', 100],
-                    body: [
-                        header,
-                        ...values
-                    ]
-                }
-                resolve(content);
-            } catch (err) {
-                reject(err);
+        return _getAlarmData(item).then(data => ({
+            layout: 'lightHorizontalLines',
+            fontSize: item.size,
+            table: {
+                headerRows: 1,
+                widths: data.headers.map(() => '*'),
+                body: [
+                    data.headers.map(col => ({ text: col, bold: true, style: [{ alignment: 'left' }] })),
+                    ...data.pdfRows
+                ]
             }
-        });
+        }));
     }
 }
 

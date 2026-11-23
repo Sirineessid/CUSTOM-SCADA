@@ -151,6 +151,10 @@ async function writeFiles() {
     files.push({ file: 'commandes.html', page: 'Commandes', viewId: null }, { file: 'commandes.js', page: 'Commandes (script)', viewId: null });
     fs.writeFileSync(path.join(siteDir, 'diagnostic.html'), diagnosticHtml());
     files.push({ file: 'diagnostic.html', page: 'Diagnostic', viewId: null }, { file: 'diagnostic.js', page: 'Diagnostic (script)', viewId: null });
+    // light CMMS: equipment records, documents, work orders, preventive maintenance and spares
+    fs.copyFileSync(path.join(__dirname, 'maintenance.client.js'), path.join(siteDir, 'maintenance.js'));
+    fs.writeFileSync(path.join(siteDir, 'maintenance.html'), maintenanceHtml());
+    files.push({ file: 'maintenance.html', page: 'Maintenance', viewId: null }, { file: 'maintenance.js', page: 'Maintenance (script)', viewId: null });
     files.push({ file: 'versions.html', page: 'Versions', viewId: null }, { file: 'versions.js', page: 'Versions (script)', viewId: null });
     files.push({ file: 'api.html', page: 'API', viewId: null }, { file: 'site-api.js', page: 'API (script)', viewId: null },
         { file: 'courbes.js', page: 'Courbes (script)', viewId: null }, { file: 'configuration-graphes.js', page: 'Configuration des graphiques (script)', viewId: null });
@@ -514,7 +518,7 @@ function apiHtml() {
   ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
         row('GET', '/api/v1/diagnostic', '', 'communication de tous les sites : état (ok, warning, error, stopped), équipements connectés, dernière donnée, tags sans mise à jour, erreurs'),
         row('GET', `${base}/diagnostic`, '', 'résumé, équipements (état, depuis, dernière donnée, erreurs), tags sans mise à jour, derniers événements'),
-        row('GET', `${base}/diagnostic/tags`, 'stale=true : tags sans mise à jour seulement\ndevice : équipement', 'tags : dernière valeur, dernière mise à jour, âge, limite, stale'),
+        row('GET', `${base}/diagnostic/tags`, 'stale=true : tags sans mise à jour seulement\ndevice : équipement', 'tags : dernière valeur, horodatage de réception/source, qualité, âge, limite, stale'),
         row('GET', `${base}/diagnostic/events`, 'from, to (7 derniers jours si absent)\nlevel : error, warning, info\ndevice : équipement', 'journal : changements d’état des connexions, erreurs et avertissements de communication')
     ])}
 </section>
@@ -636,6 +640,18 @@ function diagnosticHtml() {
 <div id="diagnostic-app" data-site="${esc(siteName)}"></div>
 <script src="site-api.js"></script>
 <script src="diagnostic.js"></script>`);
+}
+
+function maintenanceHtml() {
+    return document(`Maintenance - ${siteName}`, `${navBar('maintenance.html')}
+<header>
+  <h1>Maintenance industrielle <small>${esc(siteName)}</small></h1>
+  <p class="info">Dossiers d’équipements, documentation PDF, interventions et pannes, maintenance préventive, pièces de rechange et indicateurs de fonctionnement.
+     Les données sont propres à ce site. Associez des tags FUXA pour afficher l’état, les défauts, le compteur horaire et la disponibilité.</p>
+</header>
+<div id="maintenance-app" data-site="${esc(siteName)}"></div>
+<script src="site-api.js"></script>
+<script src="maintenance.js"></script>`);
 }
 
 function versionsHtml() {
@@ -796,7 +812,7 @@ function navBar(current) {
     return `<nav class="sitenav" id="sitenav" data-site="${esc(siteName)}" data-file="${esc(current)}">
   <a href="${base}/home" class="back" onclick="if (history.length > 1 && document.referrer) { history.back(); return false; }">&#8592; Retour</a>
   ${link(`${base}/home`, '▶ Exploitation', false, 'Mode exploitation : supervision du site (dernière page consultée)')}
-  <span class="sep"></span>${pages}${link('commandes.html', 'Commandes', current === 'commandes.html')}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('simulateur.html', 'Simulateur', current === 'simulateur.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
+  <span class="sep"></span>${pages}${link('commandes.html', 'Commandes', current === 'commandes.html')}${link('maintenance.html', 'Maintenance', current === 'maintenance.html')}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('simulateur.html', 'Simulateur', current === 'simulateur.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
   <span class="sep"></span>${link(`${base}/editor`, '✎ Édition', false, 'Mode édition : éditeur FUXA du site')}
   <span style="flex:1"></span>
   ${link('/alarmes', 'Alarmes des sites', false, 'Alarmes, statistiques et notifications de tous les sites')}
