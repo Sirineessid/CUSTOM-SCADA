@@ -167,7 +167,7 @@ export class ResWebApiService implements ResourceStorageService {
     }
 
     downloadFile(fileName: string, type: CommanType): Observable<Blob> {
-        let header = new HttpHeaders({ 'Content-Type': 'application/pdf' });
+        let header = new HttpHeaders({ 'Content-Type': 'application/octet-stream' });
         let params = {
             cmd: type,
             name: fileName,

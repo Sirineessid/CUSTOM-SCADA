@@ -489,7 +489,7 @@ function apiHtml() {
   ${table(['Méthode', 'Adresse', 'Paramètres / corps', 'Réponse (data)'], [
         row('GET', '/api/v1/diagnostic', '', 'communication de tous les sites : état (ok, warning, error, stopped), équipements connectés, dernière donnée, tags sans mise à jour, erreurs'),
         row('GET', `${base}/diagnostic`, '', 'résumé, équipements (état, depuis, dernière donnée, erreurs), tags sans mise à jour, derniers événements'),
-        row('GET', `${base}/diagnostic/tags`, 'stale=true : tags sans mise à jour seulement\ndevice : équipement', 'tags : dernière valeur, dernière mise à jour, âge, limite, stale'),
+        row('GET', `${base}/diagnostic/tags`, 'stale=true : tags sans mise à jour seulement\ndevice : équipement', 'tags : dernière valeur, horodatage de réception/source, qualité, âge, limite, stale'),
         row('GET', `${base}/diagnostic/events`, 'from, to (7 derniers jours si absent)\nlevel : error, warning, info\ndevice : équipement', 'journal : changements d’état des connexions, erreurs et avertissements de communication')
     ])}
 </section>

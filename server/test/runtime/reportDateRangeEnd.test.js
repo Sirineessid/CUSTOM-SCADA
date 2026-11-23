@@ -45,8 +45,10 @@ describe('Report calendar range endpoints', function () {
             const pdf = fs.readFileSync(await report.execute(new Date(...current, 2, 30), true));
             assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
             assert.match(pdf.subarray(-20).toString(), /%%EOF/);
-            assert.deepEqual(calls, [[begin, end], [begin, end]], 'DAQ and alarm queries cover the full period');
-            assert.deepEqual(selected, [[begin, end - 998, end], [begin, end - 998, end]], 'retain fractional-second records, exclude next period');
+            assert.deepEqual(calls, [[begin, end], [begin, end]], 'DAQ and alarm queries cover the full period once for both formats');
+            assert.deepEqual(selected, [
+                [begin, end - 998, end], [begin, end - 998, end]
+            ], 'retain fractional-second records, exclude next period');
         });
     }
     it('preserves an unspecified range as the exact execution timestamp', async function () {

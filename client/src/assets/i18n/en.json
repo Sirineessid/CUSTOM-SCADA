@@ -1979,6 +1979,7 @@
     "report.item-interval-hour": "1 Hour",
     "report.item-interval-day": "1 Day",
     "report.item-function-type": "Function type",
+    "report.compare-previous-period": "Compare with previous period",
     "report.item-function-min": "Min",
     "report.item-function-max": "Max",
     "report.item-function-average": "Average",

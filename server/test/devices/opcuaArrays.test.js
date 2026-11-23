@@ -14,6 +14,8 @@ describe('OPC UA subscription arrays', () => {
     let daq;
     const arrayType = { Scalar: 0, Array: 1, Matrix: 2 };
     const dataType = { Int64: 8, UInt64: 9, Double: 11, String: 12, ByteString: 15, ExtensionObject: 22 };
+    const goodStatus = { isGood: () => true, isUncertain: () => false, isBad: () => false };
+    const badStatus = { isGood: () => false, isUncertain: () => false, isBad: () => true };
 
     beforeEach(async () => {
         sandbox = sinon.createSandbox();
@@ -52,12 +54,14 @@ describe('OPC UA subscription arrays', () => {
         delete require.cache[require.resolve('../../runtime/devices/opcua')];
     });
 
-    async function receive(value, type = dataType.Double, rank = arrayType.Array) {
+    async function receive(value, type = dataType.Double, rank = arrayType.Array, statusCode = goodStatus) {
         const emitted = sandbox.spy();
         events.on('device-value:changed', emitted);
         monitoredItem.emit('changed', {
             value: { value, dataType: type, arrayType: rank },
-            serverTimestamp: new Date('2026-10-08T00:00:00Z')
+            sourceTimestamp: new Date('2026-10-07T23:59:59Z'),
+            serverTimestamp: new Date('2026-10-08T00:00:00Z'),
+            statusCode
         });
         await device.polling();
         assert.equal(emitted.callCount, 1);
@@ -104,6 +108,28 @@ describe('OPC UA subscription arrays', () => {
 
     it('preserves existing scalar UInt64 word-pair handling', async () => {
         assert.equal(await receive([0, 42], dataType.UInt64, arrayType.Scalar), 42);
+    });
+
+    it('exposes OPC UA quality and preserves the last good sample on a bad update', async () => {
+        assert.equal(await receive(42, dataType.Double, arrayType.Scalar), 42);
+        const goodValue = device.getValue('recipe');
+        assert.equal(goodValue.quality, 'good');
+        assert.equal(goodValue.sourceTimestamp, new Date('2026-10-07T23:59:59Z').getTime());
+
+        monitoredItem.emit('changed', {
+            value: { value: 99, dataType: dataType.Double, arrayType: arrayType.Scalar },
+            sourceTimestamp: new Date('2026-10-08T00:01:00Z'),
+            serverTimestamp: new Date('2026-10-08T00:01:01Z'),
+            statusCode: badStatus
+        });
+        await device.polling();
+
+        const current = device.getValue('recipe');
+        assert.equal(current.value, 42);
+        assert.equal(current.quality, 'bad');
+        assert.equal(current.timestamp, goodValue.timestamp);
+        assert.ok(current.qualityTimestamp >= goodValue.qualityTimestamp);
+        assert.equal(daq.callCount, 1);
     });
 });
 

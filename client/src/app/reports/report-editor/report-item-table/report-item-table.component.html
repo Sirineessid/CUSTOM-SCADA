@@ -18,6 +18,11 @@
                 </mat-option>
             </mat-select>
         </div>        
+        <div class="my-form-field ml20">
+            <mat-checkbox [(ngModel)]="data.comparePreviousPeriod" [disabled]="!canComparePreviousPeriod">
+                {{'report.compare-previous-period' | translate}}
+            </mat-checkbox>
+        </div>
         <div class="data-table my-form-field">
             <span>{{'report.tags-table-column' | translate}}</span>
             <div *ngFor="let column of columns; index as i" class="data-table-cell" matTooltip="{{column.tag.label || column.tag.name}}">

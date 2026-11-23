@@ -231,7 +231,9 @@ function Device(data, runtime) {
         // check connection status
         const now = Date.now();
         var lastRead = comm.lastReadTimestamp() || 0;
-        if (lastRead < now - pollingInterval * 5) {
+        if (pollingInterval === DISABLE_POLLING_INTERVAL) {
+            connectionStatus = comm.isConnected() ? ConnectionStatusEnum.ON : ConnectionStatusEnum.OFF;
+        } else if (lastRead < now - pollingInterval * 5) {
             connectionStatus = ConnectionStatusEnum.OFF;
         } else if (lastRead < now - pollingInterval * 2) {
             connectionStatus = ConnectionStatusEnum.WARNING;
@@ -336,7 +338,7 @@ function Device(data, runtime) {
         const lastReadAt = comm.lastReadTimestamp() || null;
         const now = Date.now();
         const staleAfterMs = pollingInterval > 0 ? pollingInterval * 5 : null;
-        const quality = !lastReadAt ? 'unknown' :
+        const quality = pollingInterval === DISABLE_POLLING_INTERVAL || !lastReadAt ? 'unknown' :
             (staleAfterMs && now - lastReadAt > staleAfterMs ? 'stale' : 'good');
         return {
             lastCommunicationAt: lastReadAt,

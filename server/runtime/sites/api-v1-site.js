@@ -62,7 +62,10 @@ function router(runtime, settings, siteId) {
         const current = runtime.devices.getTagValue(tag.id, true);
         return {
             value: current ? current.value : null,
-            timestamp: current ? current.timestamp || current.ts || null : null
+            timestamp: current ? current.timestamp || current.ts || null : null,
+            sourceTimestamp: current ? current.sourceTimestamp || null : null,
+            quality: current ? current.quality || 'good' : 'unknown',
+            qualityTimestamp: current ? current.qualityTimestamp || null : null
         };
     };
 

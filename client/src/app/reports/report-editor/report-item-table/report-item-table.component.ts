@@ -26,6 +26,7 @@ export class ReportItemTableComponent implements OnInit {
         private translateService: TranslateService,
         private projectService: ProjectService,
         @Inject(MAT_DIALOG_DATA) public data: ReportItemTable) {
+            this.data.comparePreviousPeriod = !!this.data.comparePreviousPeriod;
             if (this.data.columns.length <= 0) {
                 let tag = <Tag>{ label: 'Timestamp' };
                 this.data.columns = [ <ReportTableColumn>{
@@ -105,5 +106,12 @@ export class ReportItemTableComponent implements OnInit {
     onOkClick(): void {
         this.data.columns = this.columns;
         this.dialogRef.close(this.data);
+    }
+
+    get canComparePreviousPeriod(): boolean {
+        const range = this.data.range as string;
+        return range === Utils.getEnumKey(ReportDateRangeType, ReportDateRangeType.day) ||
+            range === Utils.getEnumKey(ReportDateRangeType, ReportDateRangeType.week) ||
+            range === Utils.getEnumKey(ReportDateRangeType, ReportDateRangeType.month);
     }
 }

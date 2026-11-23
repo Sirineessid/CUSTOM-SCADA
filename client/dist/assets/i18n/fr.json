@@ -1940,6 +1940,7 @@
     "report.item-interval-hour": "1 heure",
     "report.item-interval-day": "1 jour",
     "report.item-function-type": "Type de fonction",
+    "report.compare-previous-period": "Comparer à la période précédente",
     "report.item-function-min": "Min",
     "report.item-function-max": "Max",
     "report.item-function-average": "Moyenne",

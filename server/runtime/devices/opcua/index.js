@@ -341,7 +341,15 @@ function OpcUAclient(_data, _logger, _events, _runtime) {
      */
     this.getValue = function (id) {
         if (varsValue[id]) {
-            return {id: id, value: varsValue[id].value, ts: lastTimestampValue };
+            return {
+                id: id,
+                value: varsValue[id].value,
+                ts: lastTimestampValue,
+                timestamp: varsValue[id].timestamp || null,
+                sourceTimestamp: varsValue[id].sourceTimestamp || null,
+                quality: varsValue[id].quality || 'unknown',
+                qualityTimestamp: varsValue[id].qualityTimestamp || null
+            };
         }
         return null;
     }
@@ -549,24 +557,44 @@ function OpcUAclient(_data, _logger, _events, _runtime) {
     var _monitorcallback = function (_nodeId) {
         var nodeId = _nodeId;
         return function (dataValue) {
-            if (dataValue && dataValue.value) {
+            if (dataValue) {
                 // console.log(nodeId.toString(), '\t value : ', dataValue.value.value.toString());
                 let id = tagsIdMap[nodeId];
                 if (data.tags[id]) {
-                    let rawVal = dataValue.value.value;
-                    // Scalar Int64/UInt64 values use word pairs. Actual OPC UA
-                    // arrays and matrices must retain every element.
-                    if (dataValue.value.arrayType === opcua.VariantArrayType.Scalar && Array.isArray(rawVal) && rawVal.length > 0) {
-                        rawVal = rawVal[rawVal.length - 1];
+                    const tag = data.tags[id];
+                    const statusCode = dataValue.statusCode;
+                    const quality = !statusCode ? 'unknown' :
+                        (typeof statusCode.isGood === 'function' && statusCode.isGood()) ? 'good' :
+                            (typeof statusCode.isUncertain === 'function' && statusCode.isUncertain()) ? 'uncertain' :
+                                (typeof statusCode.isBad === 'function' && statusCode.isBad()) ? 'bad' : 'unknown';
+                    const receivedAt = Date.now();
+                    tag.quality = quality;
+                    tag.qualityTimestamp = receivedAt;
+
+                    // Keep the last usable sample if the server reports a bad value.
+                    if (quality !== 'bad' && dataValue.value) {
+                        let rawVal = dataValue.value.value;
+                        // Scalar Int64/UInt64 values use word pairs. Actual OPC UA
+                        // arrays and matrices must retain every element.
+                        if (dataValue.value.arrayType === opcua.VariantArrayType.Scalar && Array.isArray(rawVal) && rawVal.length > 0) {
+                            rawVal = rawVal[rawVal.length - 1];
+                        }
+                        tag.rawValue = rawVal;
+                        tag.dataType = dataValue.value.dataType;
+                        tag.sourceTimestamp = dataValue.sourceTimestamp instanceof Date
+                            ? dataValue.sourceTimestamp.getTime()
+                            : null;
+                        tag.serverTimestamp = dataValue.serverTimestamp instanceof Date
+                            ? dataValue.serverTimestamp.toISOString()
+                            : null;
+                        tag.timestamp = receivedAt;
+                        tag.changed = true;
+                    } else if (quality === 'bad') {
+                        tag.changed = false;
                     }
-                    data.tags[id].rawValue = rawVal;
-                    data.tags[id].dataType = dataValue.value.dataType;
-                    data.tags[id].serverTimestamp = dataValue.serverTimestamp.toString();
-                    data.tags[id].timestamp = new Date().getTime();
-                    data.tags[id].changed = true;
                 }
             }
-        };
+        }
     }
 
     /**
@@ -587,7 +615,8 @@ function OpcUAclient(_data, _logger, _events, _runtime) {
         var result = {};
         for (var id in data.tags) {
             data.tags[id].value = await deviceUtils.tagValueCompose(data.tags[id].rawValue, varsValue[id] ? varsValue[id].value : null, data.tags[id], runtime);
-            if (this.addDaq && !utils.isNullOrUndefined(data.tags[id].value) && deviceUtils.tagDaqToSave(data.tags[id], timestamp)) {
+            if (this.addDaq && data.tags[id].quality !== 'bad' &&
+                !utils.isNullOrUndefined(data.tags[id].value) && deviceUtils.tagDaqToSave(data.tags[id], timestamp)) {
                 result[id] = data.tags[id];
             }
             data.tags[id].changed = false;

@@ -66,6 +66,57 @@ describe('device lifecycle', function () {
         }
     });
 
+    it('does not report a polling-disabled device offline while its connection is healthy', function () {
+        const comm = {
+            connect: async () => {},
+            disconnect: async () => {},
+            isConnected: () => true,
+            polling: async () => {},
+            load() {},
+            getStatus: () => 'connect-ok',
+            getValues: () => ({}),
+            getValue: () => null,
+            getTagProperty: () => null,
+            lastReadTimestamp: () => Date.now() - 60000,
+            bindAddDaq() {}
+        };
+        const originalPluginPath = require.resolve('../../runtime/devices/genericethernetip');
+        const originalLoad = Module._load;
+        Module._load = function (request) {
+            if (request === 'fake-generic-enip-plugin') {
+                return { create: () => comm };
+            }
+            return originalLoad.apply(this, arguments);
+        };
+        try {
+            Device.loadPlugin(Device.DeviceType.GenericEthernetIP, 'fake-generic-enip-plugin');
+        } finally {
+            Module._load = originalLoad;
+        }
+
+        const runtime = {
+            logger: { info() {}, warn() {}, error() {} },
+            events: new EventEmitter(),
+            plugins: { manager: {} },
+            project: { getDeviceProperty() {} },
+            settings: { daqEnabled: false }
+        };
+        const device = Device.create({
+            id: 'device-polling-disabled', name: 'Polling désactivé', type: Device.DeviceType.GenericEthernetIP,
+            enabled: true, polling: -1, property: {}, tags: {}
+        }, runtime);
+        let reportedConnectionStatus;
+        device.bindUpdateConnectionStatus((id, status) => { reportedConnectionStatus = status; });
+
+        try {
+            device.checkStatus();
+            assert.strictEqual(reportedConnectionStatus, 5);
+            assert.strictEqual(device.getDiagnostics().dataQuality, 'unknown');
+        } finally {
+            Device.loadPlugin(Device.DeviceType.GenericEthernetIP, originalPluginPath);
+        }
+    });
+
     it('does not start polling when a pending connection completes after stop', async function () {
         let resolveConnect;
         let disconnectCount = 0;
