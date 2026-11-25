@@ -1,0 +1,118 @@
+<div class="deployment-page">
+    <header>
+        <div>
+            <h1>Déploiement / Publication</h1>
+            <p>Préparer, publier et superviser le runtime de production d’un site.</p>
+        </div>
+        <mat-form-field appearance="outline">
+            <mat-label>Site source</mat-label>
+            <mat-select [(value)]="siteId" (selectionChange)="onSiteChange()">
+                <mat-option *ngFor="let site of sites" [value]="site.site_id">{{site.site_id}} — {{site.state}}</mat-option>
+            </mat-select>
+        </mat-form-field>
+    </header>
+
+    <ng-container *ngIf="siteId; else noSites">
+        <mat-card>
+            <mat-card-header><mat-card-title>1. Cible de déploiement</mat-card-title></mat-card-header>
+            <mat-card-content>
+                <div class="form-grid">
+                    <mat-form-field appearance="outline" class="wide">
+                        <mat-label>URL de l’agent Windows</mat-label>
+                        <input matInput [(ngModel)]="target.agentUrl" placeholder="https://scada-cible:1882">
+                        <mat-hint>HTTPS requis pour une cible distante. Le secret reste dans les variables d’environnement du serveur.</mat-hint>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                        <mat-label>Mode d’hébergement</mat-label>
+                        <mat-select [(value)]="target.mode" (selectionChange)="setMode($event.value)">
+                            <mat-option value="ip-port">IP + Port</mat-option>
+                            <mat-option value="iis">IIS / Reverse proxy</mat-option>
+                        </mat-select>
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                        <mat-label>Port du runtime</mat-label>
+                        <input matInput type="number" min="1" max="65535" [(ngModel)]="target.runtimePort">
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                        <mat-label>Hôte public ou IP</mat-label>
+                        <input matInput [(ngModel)]="target.publicHost" placeholder="192.168.1.100">
+                    </mat-form-field>
+                    <mat-form-field appearance="outline">
+                        <mat-label>HTTPS</mat-label>
+                        <mat-select [(value)]="target.https">
+                            <mat-option [value]="false">HTTP</mat-option>
+                            <mat-option [value]="true">HTTPS</mat-option>
+                        </mat-select>
+                    </mat-form-field>
+                    <ng-container *ngIf="target.mode === 'iis'">
+                        <mat-form-field appearance="outline">
+                            <mat-label>Nom du site IIS</mat-label>
+                            <input matInput [(ngModel)]="target.iisSiteName" placeholder="FUXA-Production">
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                            <mat-label>Port de binding IIS</mat-label>
+                            <input matInput type="number" min="1" max="65535" [(ngModel)]="target.iisPort">
+                        </mat-form-field>
+                        <mat-form-field appearance="outline">
+                            <mat-label>Nom d’hôte IIS</mat-label>
+                            <input matInput [(ngModel)]="target.iisHost" placeholder="scada.example.local">
+                        </mat-form-field>
+                        <mat-form-field appearance="outline" class="wide">
+                            <mat-label>Empreinte du certificat HTTPS (IIS)</mat-label>
+                            <input matInput [(ngModel)]="target.certificateThumbprint">
+                        </mat-form-field>
+                    </ng-container>
+                </div>
+                <div class="actions">
+                    <button mat-raised-button (click)="saveTarget()" [disabled]="busy || !siteId">Enregistrer la cible</button>
+                    <button mat-raised-button (click)="verify()" [disabled]="busy || !siteId">Vérifier la configuration</button>
+                </div>
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header><mat-card-title>2. Préparer et publier</mat-card-title></mat-card-header>
+            <mat-card-content>
+                <p>Le package contient le projet, les pages, les ressources et les configurations du site. La publication sauvegarde la version distante précédente avant activation.</p>
+                <div class="actions">
+                    <button mat-raised-button (click)="generatePackage()" [disabled]="busy">Générer le package ZIP</button>
+                    <button mat-raised-button color="primary" (click)="publish()" [disabled]="busy">Publier le site</button>
+                    <button mat-button (click)="loadStatus()" [disabled]="busy">Actualiser l’état</button>
+                    <button mat-button color="warn" (click)="rollback()" [disabled]="busy || !remoteStatus?.previous">Restaurer la version précédente</button>
+                </div>
+                <mat-progress-bar *ngIf="operation && !['published','failed'].includes(operation.state)" mode="determinate" [value]="operation.progress"></mat-progress-bar>
+                <div *ngIf="operation" class="operation">
+                    <b>{{operation.state}}</b> — {{operation.progress}}%
+                    <div *ngFor="let entry of operation.logs">{{entry.time | date:'short'}} — {{entry.message}}</div>
+                </div>
+                <div class="message" *ngIf="message">{{message}}</div>
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card *ngIf="checks.length || errors.length || warnings.length">
+            <mat-card-header><mat-card-title>Vérifications</mat-card-title></mat-card-header>
+            <mat-card-content>
+                <div *ngFor="let check of checks" [class.bad]="!check.ok" [class.good]="check.ok">
+                    {{check.ok ? '✓' : '✗'}} {{check.name}} <span *ngIf="check.pages !== undefined">— {{check.pages}} page(s), {{check.devices}} équipement(s)</span>
+                </div>
+                <p class="bad" *ngFor="let error of errors">{{error}}</p>
+                <p class="warning" *ngFor="let warning of warnings">{{warning}}</p>
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header><mat-card-title>État en production</mat-card-title></mat-card-header>
+            <mat-card-content>
+                <div *ngIf="remoteStatus; else noDeployment">
+                    <p>Runtime : {{remoteStatus.running ? 'en service' : 'arrêté'}} — {{remoteStatus.mode}}</p>
+                    <p>Version active : {{remoteStatus.current || '—'}} | précédente : {{remoteStatus.previous || '—'}}</p>
+                    <p>URL : <a [href]="remoteStatus.url" target="_blank" rel="noopener">{{remoteStatus.url}}</a></p>
+                    <p>Dernière publication : {{remoteStatus.publishedAt | date:'medium'}}</p>
+                </div>
+                <ng-template #noDeployment><p>Aucun déploiement distant détecté pour cette cible.</p></ng-template>
+                <p *ngIf="latest">Dernière opération enregistrée : {{latest.action}} — {{latest.release}} — {{latest.time | date:'medium'}}</p>
+            </mat-card-content>
+        </mat-card>
+    </ng-container>
+    <ng-template #noSites><mat-card>Aucun site n’est disponible pour publication.</mat-card></ng-template>
+</div>

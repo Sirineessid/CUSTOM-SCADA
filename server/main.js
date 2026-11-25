@@ -105,6 +105,15 @@ try {
 
     settings.workDir = workDir;
     settings.appDir = __dirname;
+    if (process.env.FUXA_SITE_HTTPS_KEY || process.env.FUXA_SITE_HTTPS_CERT) {
+        if (!process.env.FUXA_SITE_HTTPS_KEY || !process.env.FUXA_SITE_HTTPS_CERT) {
+            throw new Error('Both FUXA_SITE_HTTPS_KEY and FUXA_SITE_HTTPS_CERT must be configured together.');
+        }
+        settings.https = {
+            key: fs.readFileSync(process.env.FUXA_SITE_HTTPS_KEY),
+            cert: fs.readFileSync(process.env.FUXA_SITE_HTTPS_CERT)
+        };
+    }
     // custom-SCADA: the instances of the sites use the plugins of the main FUXA
     settings.packageDir = process.env.FUXA_PACKAGE_DIR || path.resolve(rootDir, '_pkg');
     settings.settingsFile = settingsFile;
@@ -339,7 +348,8 @@ if (parsedArgs.port !== undefined) {
 settings.uiHost = settings.uiHost || "0.0.0.0";
 // custom-SCADA: the instance of a site is reached only through the main FUXA (its security checks every request)
 if (process.env.FUXA_SITE) {
-    settings.uiHost = '127.0.0.1';
+    const siteBindHost = process.env.FUXA_SITE_BIND_HOST;
+    settings.uiHost = ['127.0.0.1', '0.0.0.0', '::1'].includes(siteBindHost) ? siteBindHost : '127.0.0.1';
 }
 
 // Wait ending initialization
@@ -456,6 +466,7 @@ const SHELL_ROUTES = [
     '/home/:viewName',
     '/lab',
     '/editor',
+    '/deployment',
     '/device',
     '/plugins',
     '/rodevice',

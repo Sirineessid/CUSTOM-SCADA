@@ -24,6 +24,7 @@ import { PluginsListComponent } from './plugins/plugins-list/plugins-list.compon
 import { ArMarkerListComponent } from './ar/ar-marker-list/ar-marker-list.component';
 import { ArViewComponent } from './ar/ar-view/ar-view.component';
 import { RecipeListComponent } from './recipes/recipe-list/recipe-list.component';
+import { DeploymentComponent } from './deployment/deployment.component';
 
 const appRoutes: Routes = [
     { path: '', component: HomeComponent},//, canActivate: [AuthGuard] },
@@ -48,6 +49,7 @@ const appRoutes: Routes = [
     { path: 'mapsLocations', component: MapsLocationListComponent, canActivate: [AuthGuard] },
     { path: 'flows', component: NodeRedFlowsComponent, canActivate: [AuthGuard] },
     { path: 'apikeys', component: ApiKeysListComponent, canActivate: [AuthGuard] },
+    { path: 'deployment', component: DeploymentComponent, canActivate: [AuthGuard] },
     { path: 'plugins', component: PluginsListComponent, canActivate: [AuthGuard] },
     { path: 'arMarkers', component: ArMarkerListComponent, canActivate: [AuthGuard] },
     { path: 'ar', component: ArViewComponent },

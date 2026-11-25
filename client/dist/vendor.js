@@ -165963,6 +165963,50 @@ function defaultCompare(a, b) {
 
 /***/ }),
 
+/***/ 67953:
+/*!*********************************************************************!*\
+  !*** ./node_modules/rxjs/dist/esm/internal/operators/exhaustMap.js ***!
+  \*********************************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   exhaustMap: () => (/* binding */ exhaustMap)
+/* harmony export */ });
+/* harmony import */ var _map__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./map */ 70271);
+/* harmony import */ var _observable_innerFrom__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! ../observable/innerFrom */ 82645);
+/* harmony import */ var _util_lift__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ../util/lift */ 50819);
+/* harmony import */ var _OperatorSubscriber__WEBPACK_IMPORTED_MODULE_3__ = __webpack_require__(/*! ./OperatorSubscriber */ 91687);
+
+
+
+
+function exhaustMap(project, resultSelector) {
+  if (resultSelector) {
+    return source => source.pipe(exhaustMap((a, i) => (0,_observable_innerFrom__WEBPACK_IMPORTED_MODULE_0__.innerFrom)(project(a, i)).pipe((0,_map__WEBPACK_IMPORTED_MODULE_1__.map)((b, ii) => resultSelector(a, b, i, ii)))));
+  }
+  return (0,_util_lift__WEBPACK_IMPORTED_MODULE_2__.operate)((source, subscriber) => {
+    let index = 0;
+    let innerSub = null;
+    let isComplete = false;
+    source.subscribe((0,_OperatorSubscriber__WEBPACK_IMPORTED_MODULE_3__.createOperatorSubscriber)(subscriber, outerValue => {
+      if (!innerSub) {
+        innerSub = (0,_OperatorSubscriber__WEBPACK_IMPORTED_MODULE_3__.createOperatorSubscriber)(subscriber, undefined, () => {
+          innerSub = null;
+          isComplete && subscriber.complete();
+        });
+        (0,_observable_innerFrom__WEBPACK_IMPORTED_MODULE_0__.innerFrom)(project(outerValue, index++)).subscribe(innerSub);
+      }
+    }, () => {
+      isComplete = true;
+      !innerSub && subscriber.complete();
+    }));
+  });
+}
+
+/***/ }),
+
 /***/ 51567:
 /*!*****************************************************************!*\
   !*** ./node_modules/rxjs/dist/esm/internal/operators/filter.js ***!

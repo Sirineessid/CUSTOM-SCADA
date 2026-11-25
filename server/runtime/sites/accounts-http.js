@@ -49,6 +49,9 @@ function create(manager, settings, logger) {
         if (m) {
             const site = decodeURIComponent(m[1]);
             const rest = m[2] || '/';
+            if (/^\/deployment(\/|$)/.test(rest)) {
+                return { hub: true, role: 'admin' };
+            }
             if (/^\/api\/v1(\/|$)/.test(rest)) {
                 return siteRule(site, method, rest.replace(/^\/api\/v1\/?/, '').replace(/\/+$/, ''), write, false);
             }
@@ -87,6 +90,9 @@ function create(manager, settings, logger) {
     }
 
     function siteRule(site, method, service, write, v1) {
+        if (/^deployment(\/|$)/.test(service)) {
+            return { hub: true, role: 'admin' };
+        }
         if (!write) {
             if (/^(export|backups\/[^/]+)$/.test(service)) {
                 return { site, role: 'ingenieur' };

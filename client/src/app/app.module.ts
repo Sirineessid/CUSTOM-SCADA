@@ -263,6 +263,7 @@ import { RecipeProgressComponent } from './recipes/recipe-progress/recipe-progre
 import { HtmlRecipeViewComponent, HtmlRecipeComponent } from './gauges/controls/html-recipe/html-recipe.component';
 import { HtmlRecipeNewDialogComponent } from './gauges/controls/html-recipe/html-recipe-new-dialog/html-recipe-new-dialog.component';
 import { RecipePropertyComponent } from './gauges/controls/html-recipe/recipe-property/recipe-property.component';
+import { DeploymentComponent } from './deployment/deployment.component';
 
 export function createTranslateLoader(http: HttpClient) {
     return new TranslateHttpLoader(http, './assets/i18n/', '.json');
@@ -283,6 +284,7 @@ export const myCustomTooltipDefaults: MatTooltipDefaultOptions = {
         AppComponent,
         LabComponent,
         DeviceComponent,
+        DeploymentComponent,
         DeviceTagSelectionComponent,
         TagPropertyEditS7Component,
         TagPropertyEditServerComponent,

@@ -812,7 +812,7 @@ function navBar(current) {
     return `<nav class="sitenav" id="sitenav" data-site="${esc(siteName)}" data-file="${esc(current)}">
   <a href="${base}/home" class="back" onclick="if (history.length > 1 && document.referrer) { history.back(); return false; }">&#8592; Retour</a>
   ${link(`${base}/home`, '▶ Exploitation', false, 'Mode exploitation : supervision du site (dernière page consultée)')}
-  <span class="sep"></span>${pages}${link('commandes.html', 'Commandes', current === 'commandes.html')}${link('maintenance.html', 'Maintenance', current === 'maintenance.html')}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('simulateur.html', 'Simulateur', current === 'simulateur.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}
+  <span class="sep"></span>${pages}${link('commandes.html', 'Commandes', current === 'commandes.html')}${link('maintenance.html', 'Maintenance', current === 'maintenance.html')}${link('diagnostic.html', 'Diagnostic', current === 'diagnostic.html')}${link('simulateur.html', 'Simulateur', current === 'simulateur.html')}${link('versions.html', 'Versions', current === 'versions.html')}${link('api.html', 'API', current === 'api.html')}<a class="deploy-action" href="/deployment?site=${encodeURIComponent(siteName)}" title="Déployer le site ${esc(siteName)}">Déployer</a>
   <span class="sep"></span>${link(`${base}/editor`, '✎ Édition', false, 'Mode édition : éditeur FUXA du site')}
   <span style="flex:1"></span>
   ${link('/alarmes', 'Alarmes des sites', false, 'Alarmes, statistiques et notifications de tous les sites')}
@@ -939,6 +939,7 @@ function document(title, body) {
   .sitenav { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: -20px -20px 18px -20px; padding: 8px 20px; background: #1f3864; position: sticky; top: 0; z-index: 10; }
   .sitenav a { color: #fff; text-decoration: none; padding: 5px 10px; border-radius: 3px; font-size: 14px; }
   .sitenav a:hover { background: rgba(255,255,255,0.15); } .sitenav a.active { background: #1e88e5; }
+  .sitenav a.deploy-action { background: #2e7d32; font-weight: bold; } .sitenav a.deploy-action:hover { background: #256628; }
   .sitenav a.back { font-weight: bold; border: 1px solid rgba(255,255,255,0.5); margin-right: 6px; }
   .sitenav .site-switch { color: #fff; font-size: 13px; } .sitenav select { margin-left: 4px; padding: 3px; }
   .sitenav .sep { width: 1px; height: 20px; background: rgba(255,255,255,0.35); margin: 0 6px; }

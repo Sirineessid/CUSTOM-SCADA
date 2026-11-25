@@ -2081,6 +2081,7 @@
     "dlg.setup-layout": "Disposition",
     "dlg.setup-plugins": "Plugins",
     "dlg.setup-apikeys": "Clés API",
+    "editor.sites-deploy": "Déployer le site",
     "dlg.setup-scripts": "Scripts",
     "dlg.setup-node-red-flows": "Flux Noeud-RED",
     "dlg.setup-reports": "Rapports",

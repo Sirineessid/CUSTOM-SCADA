@@ -208,6 +208,10 @@ export class EditorSitesListComponent implements OnInit, OnChanges {
         window.open(`/site/${encodeURIComponent(site.name)}/fichiers/${file}`, '_blank');
     }
 
+    onDeploySite(site: SiteInfo) {
+        window.open(`/deployment?site=${encodeURIComponent(site.name)}`, '_blank');
+    }
+
     /** preview of a page without leaving the editor: live supervision of the page or its HTML file */
     onPreviewPage(site: SiteInfo, page: SitePage) {
         if (!site.running) {

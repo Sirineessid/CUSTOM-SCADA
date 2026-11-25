@@ -25,6 +25,9 @@
                 <button mat-menu-item (click)="onConfigureHistory(site)" *ngIf="site.name === currentSite">{{'editor.sites-history-menu' | translate}}</button>
                 <button mat-menu-item (click)="onOpenSiteFile(site, 'diagnostic.html')" [disabled]="!site.running">{{'editor.sites-open-diagnostic' | translate}}</button>
                 <button mat-menu-item (click)="onOpenSiteFile(site, 'versions.html')" [disabled]="!site.running">{{'editor.sites-open-versions' | translate}}</button>
+                <button mat-menu-item (click)="onDeploySite(site)" [disabled]="!site.running || site.busy">
+                    <mat-icon>cloud_upload</mat-icon>{{'editor.sites-deploy' | translate}}
+                </button>
                 <button mat-menu-item (click)="onOpenApi(site)">{{'editor.sites-open-api' | translate}}</button>
                 <button mat-menu-item (click)="onExportSite(site)" [disabled]="site.busy">{{'editor.sites-export' | translate}}</button>
                 <!-- the site open in this editor is managed from the editor of another site or of the main project -->

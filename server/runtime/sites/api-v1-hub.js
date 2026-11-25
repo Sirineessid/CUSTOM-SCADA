@@ -22,6 +22,7 @@ const http = require('http');
 const express = require('express');
 const { ApiError, badRequest, notFound, send, sendError, handle, jsonErrors, body } = require('./api-v1-common');
 const accounts = require('./accounts');
+const deploymentModule = require('./deployments');
 
 /** with the security of the sites: only the sites the user can open */
 const visible = (req, list, key) => (req.scadaUser && accounts.enabled() ? list.filter(s => accounts.roleOn(req.scadaUser, s[key])) : list);
@@ -36,6 +37,16 @@ function router(manager, settings, logger) {
     const app = express.Router();
     const authJwt = require('../../api/jwt-helper');
     const h = fnc => handle(fnc, logger);
+    const requireDeploymentAdmin = (req, res, next) => {
+        if (accounts.enabled()) {
+            if (req.scadaUser && req.scadaUser.admin) {
+                return next();
+            }
+        } else if (!settings.secureEnabled || authJwt.haveAdminPermission(req.userGroups)) {
+            return next();
+        }
+        res.status(403).json({ error: { code: 'forbidden', message: 'Administrator permission required.' } });
+    };
 
     app.use((req, res, next) => settings.secureEnabled ? authJwt.requireAuth(req, res, next) : next());
 
@@ -59,7 +70,11 @@ function router(manager, settings, logger) {
                 sites: [
                     'GET /api/v1/sites', 'POST /api/v1/sites { site_id }', 'GET /api/v1/sites/{site_id}',
                     'PUT /api/v1/sites/{site_id} { site_id }', 'DELETE /api/v1/sites/{site_id}',
-                    'POST /api/v1/sites/{site_id}/start', 'POST /api/v1/sites/{site_id}/stop', 'GET /api/v1/sites/{site_id}/export'
+                    'POST /api/v1/sites/{site_id}/start', 'POST /api/v1/sites/{site_id}/stop', 'GET /api/v1/sites/{site_id}/export',
+                    'GET|PUT /api/v1/sites/{site_id}/deployment', 'POST /api/v1/sites/{site_id}/deployment/preflight',
+                    'GET /api/v1/sites/{site_id}/deployment/package', 'POST /api/v1/sites/{site_id}/deployment/publish',
+                    'GET /api/v1/sites/{site_id}/deployment/operations/{operation_id}',
+                    'GET /api/v1/sites/{site_id}/deployment/status', 'POST /api/v1/sites/{site_id}/deployment/rollback'
                 ],
                 configuration: ['GET /api/v1/sites/{site_id}/config', 'GET|PUT /api/v1/sites/{site_id}/config/graphs',
                     'GET|PUT /api/v1/sites/{site_id}/config/history', 'POST /api/v1/sites/{site_id}/config/history/test'],
@@ -278,6 +293,8 @@ function router(manager, settings, logger) {
         const site = findSite(req.params.site_id);
         send(res, await manager.restoreBackup(site, req.params.backup_id), { site_id: site.name });
     }));
+
+    app.use('/sites/:site_id/deployment', requireDeploymentAdmin, deploymentModule.router(manager, settings, logger));
 
     // the other services are answered by the instance of the site
     app.all('/sites/:site_id/*', h((req, res) => {

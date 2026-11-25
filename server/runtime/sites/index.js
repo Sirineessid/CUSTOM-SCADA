@@ -88,6 +88,7 @@ function init(app, server, _settings, _logger) {
         start: startSite,
         stop: stopSite,
         exportZip: exportSite,
+        packageSite: site => buildZip(site),
         backups: listBackups,
         backup: findBackup,
         createBackup: (site, comment) => createBackup(site, 'manual', comment),

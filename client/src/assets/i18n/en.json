@@ -2120,6 +2120,7 @@
     "dlg.setup-layout": "Layout",
     "dlg.setup-plugins": "Plugins",
     "dlg.setup-apikeys": "API Keys",
+    "editor.sites-deploy": "Deploy site",
     "dlg.setup-scripts": "Scripts",
     "dlg.setup-node-red-flows": "Node-RED Flows",
     "dlg.setup-reports": "Reports",
