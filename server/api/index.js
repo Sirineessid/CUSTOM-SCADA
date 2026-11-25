@@ -14,6 +14,7 @@ var authApi = require('./auth');
 var usersApi = require('./users');
 var apiKeysApi = require('./apikeys');
 var dbExplorerApi = require('./dbexplorer');
+var opcua2pgApi = require('./opcua2pg');
 var alarmsApi = require('./alarms');
 var pluginsApi = require('./plugins');
 var diagnoseApi = require('./diagnose');
@@ -99,6 +100,8 @@ function init(_server, _runtime) {
             apiApp.use(apiKeysApi.app());
             dbExplorerApi.init(runtime, authMiddleware, verifyGroups);
             apiApp.use(dbExplorerApi.app());
+            opcua2pgApi.init(runtime, authMiddleware, verifyGroups);
+            apiApp.use(opcua2pgApi.app());
 
             apiApp.use((err, req, res, next) => {
                 if (err?.type === 'entity.too.large') {

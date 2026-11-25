@@ -80,6 +80,14 @@
         background-color: var(--workPanelBackground);
     }
 
+    .opcua2pg-frame {
+        width: 100%;
+        height: 100%;
+        border: none;
+        display: block;
+        background-color: var(--workPanelBackground);
+    }
+
     .mat-table {
         overflow: auto;
         /* min-width: 1500px; */
