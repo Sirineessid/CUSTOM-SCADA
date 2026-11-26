@@ -102,6 +102,3 @@ server/_widgets
 AGENTS.md
 # CI workflows omitted from the public mirror (OAuth token without workflow scope)
 .github/workflows/
-
-# generated runtime-only deployment packages
-dist-release/
