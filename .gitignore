@@ -100,3 +100,5 @@ server/_widgets
 
 .agents/
 AGENTS.md
+# CI workflows omitted from the public mirror (OAuth token without workflow scope)
+.github/workflows/
