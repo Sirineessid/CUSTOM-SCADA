@@ -78,3 +78,28 @@ node tools/test-site-color-visibility.js --site <nom> --tag t_visibility_test --
 ```
 
 Le tag peut bien sûr provenir d'un périphérique PostgreSQL, OPC UA, S7, Modbus, MQTT… : il suffit qu'il soit booléen et lié à l'objet.
+
+## 5. Déploiement : donner le travail, pas le code source
+
+Le bouton **Déployer** d'un site envoie déjà uniquement le **paquet du site** (`packageSite()` → `buildZip()` dans `server/runtime/sites/index.js`) : projet, pages HTML générées, historique, images — jamais `client/src`, `tools/` ni l'historique Git. Mais le poste cible doit recevoir une installation **runtime-only** :
+
+```bash
+node tools/build-runtime-package.js
+# -> dist-release/fuxa-runtime-only.zip  (~16 Mo, 754 fichiers)
+```
+
+Le zip contient uniquement `client/dist/` (UI compilée) et le nécessaire à `server/` (dont `deployment-agent/`). Il exclut : `client/src`, `client/e2e`, `client/test`, `tools/`, `snapshots/`, `.git/`, `node_modules/`, `_appdata/`, `server/sites/`, logs et bases locales.
+
+Sur le poste client :
+1. dészipper, puis `cd fuxa-runtime/server && npm ci --omit=dev` ;
+2. configurer l'agent (`FUXA_DEPLOYMENT_TOKEN` ≥ 32 caractères, `FUXA_RUNTIME_HOME`, TLS) comme décrit dans `server/deployment-agent/README.md` ;
+3. recevoir les releases via **Déployer → Publier** : seul le projet du site est transféré et redémarré.
+
+Pour limiter l'accès dans l'UI du site déployé, dans `_appdata/mysettings.json` du site cible :
+- `secureEnabled: true` et un `secretCode` persisté ;
+- `secureOnlyEditor: false` (les écritures/commandes demandent aussi une session authentifiée) ;
+- `swaggerEnabled: false`, `nodeRedEnabled: false`.
+
+Dans le projet du site (`layout`) : `hidenavigation: true`, `loginonstart: true`, et des `permissionRoles` sur les pages/boutons sensibles. En mode IIS, le runtime reste lié à `127.0.0.1` (`FUXA_SITE_BIND_HOST`) et n'est exposé que via le reverse-proxy IIS en HTTPS.
+
+⚠️ Le dépôt GitHub est public : le code source y est visible par tous. Ne donnez pas l'accès au dépôt au client ; le paquet runtime, lui, ne contient pas le code source.
