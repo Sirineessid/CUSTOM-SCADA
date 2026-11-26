@@ -1,0 +1,39 @@
+.deployment-page {
+    height: 100%;
+    overflow: auto;
+    padding: 24px;
+    box-sizing: border-box;
+    background: #f5f7fa;
+
+    header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    h1 { margin: 0 0 6px; }
+    p { margin: 8px 0; }
+    mat-card { margin-bottom: 18px; }
+    mat-card-content { padding-top: 16px; }
+    mat-form-field { width: 100%; }
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(220px, 1fr));
+        gap: 8px 16px;
+    }
+    .wide { grid-column: 1 / -1; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+    .operation { max-height: 180px; overflow: auto; margin: 14px 0; font-family: monospace; }
+    .message { margin-top: 12px; }
+    .good { color: #26734d; }
+    .bad { color: #b3261e; }
+    .warning { color: #946200; }
+}
+
+@media (max-width: 700px) {
+    .deployment-page { padding: 12px; }
+    .deployment-page header { display: block; }
+    .deployment-page .form-grid { grid-template-columns: 1fr; }
+}

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comptes et droits - custom-SCADA</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; color: #222; background: #f4f5f7; }
+  .top { background: #1f3864; color: #fff; padding: 10px 20px; display: flex; gap: 14px; align-items: center; }
+  .top a { color: #fff; text-decoration: none; } .top .sp { flex: 1; }
+  main { padding: 16px 20px; }
+  h1 { color: #0d47a1; margin: 4px 0; } h2 { color: #1f3864; border-bottom: 2px solid #1f3864; padding-bottom: 4px; margin-top: 22px; }
+  h3 { color: #2e74b5; }
+  .info { color: #555; font-size: 13px; }
+  table { border-collapse: collapse; width: 100%; background: #fff; font-size: 13px; }
+  th { background: #1f3864; color: #fff; text-align: left; padding: 5px 8px; } td { border: 1px solid #ccc; padding: 4px 8px; vertical-align: top; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+  input, select { padding: 4px; } button { padding: 5px 12px; cursor: pointer; }
+  button.primary { background: #1e88e5; color: #fff; border: none; border-radius: 3px; }
+  .status { font-size: 13px; color: #555; } .error { color: #c62828; font-weight: bold; }
+  .tabs { display: flex; gap: 4px; border-bottom: 2px solid #1f3864; margin: 12px 0 6px; }
+  .tabs button { border: 1px solid #cfd8dc; border-bottom: none; background: #eceff1; border-radius: 6px 6px 0 0; padding: 7px 16px; }
+  .tabs button.on { background: #1f3864; color: #fff; }
+  .card { background: #fff; border: 1px solid #cfd8dc; border-radius: 6px; padding: 10px 14px; margin: 12px 0; }
+  .st { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; font-weight: bold; }
+  .st-ok { background: #e8f5e9; color: #1b5e20; } .st-off { background: #eceff1; color: #546e7a; } .st-error { background: #ffebee; color: #b71c1c; }
+  .st-warning { background: #fff3e0; color: #e65100; } .st-info { background: #e3f2fd; color: #0d47a1; }
+  .scroll { max-height: 560px; overflow: auto; }
+</style>
+</head>
+<body>
+<div class="top"><b>custom-SCADA</b><a href="/editor">Éditeur</a><a href="/alarmes">Alarmes des sites</a><span class="sp"></span><span id="who"></span><a href="#" id="logout">Déconnexion</a></div>
+<main>
+  <h1>Comptes et droits des sites</h1>
+  <p class="info">Un compte par utilisateur pour tous les sites. Pour chaque site : rôle consultation (voir), opérateur (+ commandes et acquittements),
+     ingénieur (+ consignes, configuration, éditeur du site) ou administrateur (tout, comptes et sites), et liste facultative des équipements qu’il peut commander.</p>
+  <div id="app"></div>
+</main>
+<script src="/comptes.js"></script>
+</body>
+</html>
